@@ -37,6 +37,7 @@ struct slope {
 };
 
 unsigned int is_in_fov(struct camera* c, struct matrix* m);
+void translate_rotation(struct matrix* point, struct matrix* rotation_point, struct matrix* rotation_delta, struct matrix* buffer);
 //unsigned int greater_than_point(struct matrix* po, struct matrix* p1, struct matrix* p2);
 //unsigned int less_than_point(struct matrix* po, struct matrix* p1, struct matrix* p2);
 void add_m(struct matrix* m1, struct matrix* m2, struct matrix* mr);
@@ -271,6 +272,38 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 		cam.h_fov = (max_fov_degrees * width) / height;
 	}
 	
+	// Start: Debuging code
+	/*
+	printf("HFOV: %f, VFOV: %f\n\n", cam.h_fov, cam.v_fov);
+	
+	cam.looking_at.x =   0.0;
+	cam.looking_at.y =   0.0;
+	cam.looking_at.z =  -2.0;
+	is_in_fov(&cam, &box.lines[ 0].p0);
+	
+	cam.looking_at.x =   0.0;
+	cam.looking_at.y =  -0.1;
+	cam.looking_at.z =  -2.0;
+	is_in_fov(&cam, &box.lines[ 0].p0);
+	
+	cam.looking_at.x =  -0.1;
+	cam.looking_at.y =   0.0;
+	cam.looking_at.z =  -0.0;
+	is_in_fov(&cam, &box.lines[ 0].p0);
+	
+	cam.looking_at.x =   0.0;
+	cam.looking_at.y =   1.0;
+	cam.looking_at.z =  -1.0;
+	is_in_fov(&cam, &box.lines[ 0].p0);
+	
+	cam.looking_at.x =   1.0;
+	cam.looking_at.y =   1.0;
+	cam.looking_at.z =  -2.0;
+	is_in_fov(&cam, &box.lines[ 0].p0);
+	goto end;
+	*/
+	// End: Debuging code
+	
 	/*
 	cam_vect_max.z = cam_vect_min.z;
 	
@@ -295,7 +328,9 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	unsigned int x = 0;
 	unsigned int y = 0;
 	while (i < 12) {
-		if (is_in_fov(&cam, &box.lines[i].p0)) {
+		printf("\n------------------------------\n\n");
+		printf("ia: %d\n\n", i);
+		if (is_in_fov(&cam, &(box.lines[i].p0))) {
 			x = 0;
 			while (x < 20) {
 				y = 0;
@@ -305,10 +340,15 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 				}
 				x++;
 			}
+			printf("ia: Success\n", i);
+		} else {
+			printf("ia: Failed\n", i);
 		}
 		a += 40;
 		
-		if (is_in_fov(&cam, &box.lines[i].p1)) {
+		printf("\n------------------------------\n\n");
+		printf("ib: %d\n\n", i);
+		if (is_in_fov(&cam, &(box.lines[i].p1))) {
 			x = 0;
 			while (x < 20) {
 				y = 0;
@@ -318,13 +358,18 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 				}
 				x++;
 			}
+			printf("ib: Success\n", i);
+		} else {
+			printf("ib: Failed\n", i);
 		}
 		a += 40;
 		
 		i++;
 	}
 	
-	sleep(3);
+	sleep(1);
+	
+	end:
 	
 	munmap(ptr, screensize);
 	
@@ -339,33 +384,327 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m) {
 	struct matrix low_angle;
 	struct matrix high_angle;
 	
-	// TODO calculate low_angle and high_angle
+	// TODO: calculate low_angle and high_angle
+	float x_angle = 0.0;
+	float y_angle = 0.0;
+	//float z_angle = 0.0;
+	//c->h_fov;
+	//c->v_fov;
+	float delta_x;
+	float delta_y;
+	float delta_z;
+	//slope_x = c->location.x c->looking_at.x c->location.y c->looking_at.y
+	delta_x = c->looking_at.x - c->location.x;
+	delta_y = c->looking_at.y - c->location.y;
+	delta_z = c->looking_at.z - c->location.z;
+	if (delta_y == 0) {
+		x_angle = 0.0;
+	} else {
+		x_angle = atanf(delta_y / sqrtf((delta_x * delta_x) + (delta_z * delta_z)));
+	}
+	if (delta_x == 0) {
+		y_angle = 0.0;
+	} else {
+		y_angle = atanf(delta_x / delta_z);
+	}
+	if (delta_z < 0) {
+		//x_angle = -x_angle;
+		y_angle += M_PI;
+		if (y_angle > 180.0) {
+			y_angle -= 360.0;
+		}
+	}
+	
+	printf("x_angle: %f\n", (x_angle * 180) / M_PI);
+	printf("y_angle: %f\n", (y_angle * 180) / M_PI);
+	printf("\n");
+	
+	float l_xangle;
+	float h_xangle;
+	float l_yangle;
+	float h_yangle;
+	l_yangle = 0.0;
+	h_yangle = 0.0;
+	l_xangle = x_angle - ((c->v_fov * M_PI) / 360.0);
+	h_xangle = x_angle + ((c->v_fov * M_PI) / 360.0);
+	if (l_xangle > M_PI_2) {
+		l_xangle = M_PI - l_xangle;
+		l_yangle += M_PI;
+	} else if (l_xangle < -90.0) {
+		l_xangle = M_PI + l_xangle;
+		l_yangle += M_PI;
+	}
+	if (h_xangle > M_PI_2) {
+		h_xangle = M_PI - h_xangle;
+		h_yangle += M_PI;
+	} else if (h_xangle < -90.0) {
+		h_xangle = M_PI + h_xangle;
+		h_yangle += M_PI;
+	}
+	l_yangle += y_angle - ((c->h_fov * M_PI) / 360.0);
+	h_yangle += y_angle + ((c->h_fov * M_PI) / 360.0);
+	low_angle.z = c->location.z + cosf(l_yangle);
+	low_angle.x = c->location.x + sinf(l_yangle);
+	low_angle.y = c->location.y + sinf(l_xangle);
+	high_angle.z = c->location.z + cosf(h_yangle);
+	high_angle.x = c->location.x + sinf(h_yangle);
+	high_angle.y = c->location.y + sinf(h_xangle);
+	
+	printf("l_xangle = %f, l_yangle = %f\n", l_xangle * 180 / M_PI, l_yangle * 180 / M_PI);
+	printf("h_xangle = %f, h_yangle = %f\n", h_xangle * 180 / M_PI, h_yangle * 180 / M_PI);
+	printf("\n");
+	printf("low_angle: x = %f, y = %f, z = %f\n", low_angle.x, low_angle.y, low_angle.z);
+	printf("high_angle: x = %f, y = %f, z = %f\n", high_angle.x, high_angle.y, high_angle.z);
+	printf("\n");
+	
+	struct matrix buffer;
+	struct matrix rotation_delta;
+	rotation_delta.x = x_angle;
+	rotation_delta.y = y_angle;
+	rotation_delta.z = 0.0;
+	translate_rotation(m, &(c->location), &rotation_delta, &buffer);
 	
 	// Calculate x-y y-z x-z for low_angle
-	struct slope la_x_y;
+	//struct slope la_x_y;
 	struct slope la_y_z;
 	struct slope la_x_z;
-	
+	// Calc x-y and x-z
 	if (c->location.x == low_angle.x) {
-		// TODO: Represent x = c.location.x
-		la_x_y.type = 1;
+		//la_x_y.type = 1;
 		la_x_z.type = 1;
-		la_x_y.offset = c->location.x;
-		la_x_z.offset = c->location.z;
+		//la_x_y.offset = c->location.x;
+		la_x_z.offset = c->location.x;
 	} else {
-		la_x_y.type = 0;
+		//la_x_y.type = 0;
 		la_x_z.type = 0;
-		
-		la_x_y.slope = (c->location.y - low_angle.y) / (c->location.x - low_angle.x);
+		//la_x_y.slope = (c->location.y - low_angle.y) / (c->location.x - low_angle.x);
 		la_x_z.slope = (c->location.z - low_angle.z) / (c->location.x - low_angle.x);
-		
-		la_x_y.offset = c->location.y - (la_x_y.slope * c->location.x);
+		//la_x_y.offset = c->location.y - (la_x_y.slope * c->location.x);
 		la_x_z.offset = c->location.z - (la_x_z.slope * c->location.x);
+	}
+	// Calc y-z
+	if (c->location.y == low_angle.y) {
+		la_y_z.type = 1;
+		la_y_z.offset = c->location.y;
+	} else {
+		la_y_z.type = 0;
+		la_y_z.slope = (c->location.z - low_angle.z) / (c->location.y - low_angle.y);
+		la_y_z.offset = c->location.z - (la_y_z.slope * c->location.y);
 	}
 	
 	// Calculate x-y y-z x-z for high_angle
+	//struct slope ha_x_y;
+	struct slope ha_y_z;
+	struct slope ha_x_z;
+	// Calc x-y and x-z
+	if (c->location.x == high_angle.x) {
+		//ha_x_y.type = 1;
+		ha_x_z.type = 1;
+		//ha_x_y.offset = c->location.x;
+		ha_x_z.offset = c->location.x;
+	} else {
+		//ha_x_y.type = 0;
+		ha_x_z.type = 0;
+		//ha_x_y.slope = (c->location.y - high_angle.y) / (c->location.x - high_angle.x);
+		ha_x_z.slope = (c->location.z - high_angle.z) / (c->location.x - high_angle.x);
+		//ha_x_y.offset = c->location.y - (ha_x_y.slope * c->location.x);
+		ha_x_z.offset = c->location.z - (ha_x_z.slope * c->location.x);
+	}
+	// Calc y-z
+	if (c->location.y == high_angle.y) {
+		ha_y_z.type = 1;
+		ha_y_z.offset = c->location.y;
+	} else {
+		ha_y_z.type = 0;
+		ha_y_z.slope = (c->location.z - high_angle.z) / (c->location.y - high_angle.y);
+		ha_y_z.offset = c->location.z - (ha_y_z.slope * c->location.y);
+	}
 	
-	return 0;
+	if (ha_y_z) {
+	}
+	
+	// Determine whether the calculation should be less-than or greater-than 
+	// per each slope based on the point the camera is pointing at.
+	// Do the low_angle
+	if (la_x_y.type == 0) {
+		if (c->looking_at.y < (la_x_y.slope * c->looking_at.x) + la_x_y.offset) {
+			if (m->y > (la_x_y.slope * m->x) + la_x_y.offset) {
+				printf("TraceA\n");
+				return 0;
+			}
+		} else {
+			if (m->y < (la_x_y.slope * m->x) + la_x_y.offset) {
+				printf("[DEBUG] m->y: %f\n", m->y);
+				printf("[DEBUG] m->x: %f\n", m->x);
+				printf("[DEBUG] m->z: %f\n", m->z);
+				printf("[DEBUG] la_x_y.slope: %f\n", la_x_y.slope);
+				printf("[DEBUG] la_x_y.offset: %f\n", la_x_y.offset);
+				printf("TraceB\n");
+				return 0;
+			}
+		}
+	} else {
+		if (c->looking_at.x < la_x_y.offset) {
+			if (m->x > la_x_y.offset) {
+				printf("TraceC\n");
+				return 0;
+			}
+		} else if (c->looking_at.x > la_x_y.offset) {
+			if (m->x < la_x_y.offset) {
+				printf("TraceD\n");
+				return 0;
+			}
+		}
+	}
+	if (la_y_z.type == 0) {
+		if (c->looking_at.z < (la_y_z.slope * c->looking_at.y) + la_y_z.offset) {
+			if (m->z > (la_y_z.slope * m->y) + la_y_z.offset) {
+				printf("TraceE\n");
+				return 0;
+			}
+		} else if (c->looking_at.z > (la_y_z.slope * c->looking_at.y) + la_y_z.offset) {
+			if (m->z < (la_y_z.slope * m->y) + la_y_z.offset) {
+				printf("TraceF\n");
+				return 0;
+			}
+		}
+	} else {
+		if (c->looking_at.y < la_y_z.offset) {
+			if (m->y > la_y_z.offset) {
+				printf("TraceG\n");
+				return 0;
+			}
+		} else if (c->looking_at.y > la_y_z.offset) {
+			if (m->y < la_y_z.offset) {
+				printf("TraceH\n");
+				return 0;
+			}
+		}
+	}
+	if (la_x_z.type == 0) {
+		if (c->looking_at.z < (la_x_z.slope * c->looking_at.x) + la_x_z.offset) {
+			if (m->z > (la_x_z.slope * m->x) + la_x_z.offset) {
+				printf("TraceI\n");
+				return 0;
+			}
+		} else if (c->looking_at.z > (la_x_z.slope * c->looking_at.x) + la_x_z.offset) {
+			if (m->z < (la_x_z.slope * m->x) + la_x_z.offset) {
+				printf("TraceJ\n");
+				return 0;
+			}
+		}
+	} else {
+		if (c->looking_at.x < la_x_z.offset) {
+			if (m->x > la_x_z.offset) {
+				printf("TraceK\n");
+				return 0;
+			}
+		} else if (c->looking_at.x > la_x_z.offset) {
+			if (m->x < la_x_z.offset) {
+				printf("TraceL\n");
+				return 0;
+			}
+		}
+	}
+	// Do the high_angle
+	if (ha_x_y.type == 0) {
+		if (c->looking_at.y < (ha_x_y.slope * c->looking_at.x) + ha_x_y.offset) {
+			if (m->y > (ha_x_y.slope * m->x) + ha_x_y.offset) {
+				printf("TraceM\n");
+				return 0;
+			}
+		} else if (c->looking_at.y > (ha_x_y.slope * c->looking_at.x) + ha_x_y.offset) {
+			if (m->y < (ha_x_y.slope * m->x) + ha_x_y.offset) {
+				printf("TraceN\n");
+				return 0;
+			}
+		}
+	} else {
+		if (c->looking_at.x < ha_x_y.offset) {
+			if (m->x > ha_x_y.offset) {
+				printf("TraceO\n");
+				return 0;
+			}
+		} else if ((c->looking_at.x > ha_x_y.offset)) {
+			if (m->x < ha_x_y.offset) {
+				printf("TraceP\n");
+				return 0;
+			}
+		}
+	}
+	if (ha_y_z.type == 0) {
+		if (c->looking_at.z < (ha_y_z.slope * c->looking_at.y) + ha_y_z.offset) {
+			if (m->z > (ha_y_z.slope * m->y) + ha_y_z.offset) {
+				printf("TraceQ\n");
+				return 0;
+			}
+		} else if (c->looking_at.z > (ha_y_z.slope * c->looking_at.y) + ha_y_z.offset) {
+			if (m->z < (ha_y_z.slope * m->y) + ha_y_z.offset) {
+				printf("TraceR\n");
+				return 0;
+			}
+		}
+	} else {
+		if (c->looking_at.y < ha_y_z.offset) {
+			if (m->y > ha_y_z.offset) {
+				printf("TraceS\n");
+				return 0;
+			}
+		} else if (c->looking_at.y > ha_y_z.offset) {
+			if (m->y < ha_y_z.offset) {
+				printf("TraceT\n");
+				return 0;
+			}
+		}
+	}
+	if (ha_x_z.type == 0) {
+		if (c->looking_at.z < (ha_x_z.slope * c->looking_at.x) + ha_x_z.offset) {
+			if (m->z > (ha_x_z.slope * m->x) + ha_x_z.offset) {
+				printf("TraceU\n");
+				return 0;
+			}
+		} else if (c->looking_at.z > (ha_x_z.slope * c->looking_at.x) + ha_x_z.offset) {
+			if (m->z < (ha_x_z.slope * m->x) + ha_x_z.offset) {
+				printf("TraceV\n");
+				return 0;
+			}
+		}
+	} else {
+		if (c->looking_at.x < ha_x_z.offset) {
+			if (m->x > ha_x_z.offset) {
+				printf("TraceW\n");
+				return 0;
+			}
+		} else if (c->looking_at.x > ha_x_z.offset) {
+			if (m->x < ha_x_z.offset) {
+				printf("TraceX\n");
+				return 0;
+			}
+		}
+	}
+	
+	return 1;
+}
+void translate_rotation(struct matrix* point, struct matrix* rotation_point, struct matrix* rotation_delta, struct matrix* buffer) {
+	float delta_x = point->x - rotation_point->x;
+	float delta_y = point->y - rotation_point->y;
+	float delta_z = point->z - rotation_point->z; //TODO
+	float tmp_var;
+	
+	// Translate Around Y-Axis
+	tmp_var = sqrtf((delta_x * delta_x) + (delta_z * delta_z));
+	delta_x = sinf(rotation_delta->y) * tmp_var;
+	delta_z = cosf(rotation_delta->y) * tmp_var;
+	buffer->x = rotation_point->x + delta_x;
+	//buffer->z = rotation_point->z + delta_z;
+	// Translate Around X-Axis
+	tmp_var = sqrtf((delta_y * delta_y) + (delta_z * delta_z));
+	delta_y = sinf(rotation_delta->x) * tmp_var;
+	delta_z = cosf(rotation_delta->x) * tmp_var;
+	buffer->y = rotation_point->y + delta_y;
+	buffer->z = rotation_point->z + delta_z;
+	
+	return;
 }
 /*
 unsigned int greater_than_point(struct matrix* po, struct matrix* p1, struct matrix* p2) {
