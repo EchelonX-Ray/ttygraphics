@@ -330,8 +330,8 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	unsigned int x = 0;
 	unsigned int y = 0;
 	while (i < 12) {
-		printf("\n------------------------------\n\n");
-		printf("ia: %d\n\n", i);
+		//printf("\n------------------------------\n\n");
+		printf("ia: %d\n", i);
 		if (is_in_fov(&cam, &(box.lines[i].p0))) {
 			x = 0;
 			while (x < 20) {
@@ -346,10 +346,11 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 		} else {
 			printf("ia: Failed\n", i);
 		}
+		printf("\n");
 		a += 40;
 		
-		printf("\n------------------------------\n\n");
-		printf("ib: %d\n\n", i);
+		//printf("\n------------------------------\n\n");
+		printf("ib: %d\n", i);
 		if (is_in_fov(&cam, &(box.lines[i].p1))) {
 			x = 0;
 			while (x < 20) {
@@ -364,6 +365,7 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 		} else {
 			printf("ib: Failed\n", i);
 		}
+		printf("\n");
 		a += 40;
 		
 		i++;
@@ -383,6 +385,7 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 unsigned int is_in_fov(struct camera* c, struct matrix* m) {
 	//tanf(c.h_fov / 2.0) * cam_vect_min.z;
 	
+	/*
 	struct matrix low_angle;
 	struct matrix high_angle;
 	
@@ -420,6 +423,7 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m) {
 	printf("x_angle: %f\n", x_angle * 180.0 / M_PI);
 	printf("y_angle: %f\n", y_angle * 180.0 / M_PI);
 	printf("\n");
+	*/
 	
 	/*
 	float l_xangle;
@@ -464,9 +468,9 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m) {
 	
 	struct matrix buffer;
 	struct matrix rotation_delta;
-	rotation_delta.x = x_angle;
-	rotation_delta.y = y_angle;
 	rotation_delta.z = 0.0;
+	rotation_delta.y = points_to_angle_2d(c->location.x, c->location.z, c->looking_at.x, c->looking_at.z);
+	rotation_delta.x = points_to_angle_2d(c->location.y, c->location.z, c->looking_at.y, c->looking_at.z);
 	translate_rotation(m, &(c->location), &rotation_delta, &buffer);
 	
 	float h_xslope;
@@ -486,8 +490,8 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m) {
 	l_xoffset = c->location.y - (l_yslope * c->location.z);
 	l_yoffset = c->location.x - (l_xslope * c->location.z);
 	
-	printf("m->x: %f, m->y: %f, m->z: %f\n", m->x, m->y, m->z);
-	printf("b->x: %f, b->y: %f, b->z: %f\n", buffer.x, buffer.y, buffer.z);
+	//printf("m->x: %f, m->y: %f, m->z: %f\n", m->x, m->y, m->z);
+	//printf("b->x: %f, b->y: %f, b->z: %f\n", buffer.x, buffer.y, buffer.z);
 	
 	if (buffer.x > (h_xslope * buffer.z) + h_xoffset) {
 		return 0;
@@ -735,26 +739,16 @@ void translate_rotation(struct matrix* target_point, struct matrix* rotation_poi
 	buffer->y = 0.0;
 	buffer->z = 0.0;
 	
-	printf("target_point-> x:%f, y:%f, z:%f\n", target_point->x, target_point->y, target_point->z);
-	printf("rotation_point-> x:%f, y:%f, z:%f\n", rotation_point->x, rotation_point->y, rotation_point->z);
-	printf("rotation_delta-> x:%f, y:%f, z:%f\n", rotation_delta->x * 180 / M_PI, rotation_delta->y * 180 / M_PI, rotation_delta->z * 180 / M_PI);
-	printf("delta_x: %f, delta_y: %f, delta_z: %f\n\n", delta_x, delta_y, delta_z);
-	
 	// Translate Around Y-Axis
 	angle = points_to_angle_2d(rotation_point->x, rotation_point->z, target_point->x, target_point->z);
-	printf("com angle y: %f\n", angle * 180.0 / M_PI);
 	angle -= rotation_delta->y;
-	printf("sum angle y: %f\n", angle * 180.0 / M_PI);
 	angle_to_points_2d(angle, sqrtf(	(target_point->x - rotation_point->x) * (target_point->x - rotation_point->x) + \
 												(target_point->z - rotation_point->z) * (target_point->z - rotation_point->z) ), \
 												rotation_point->x, rotation_point->z, &(buffer->x), &(buffer->z));
-	printf("\nbuffer->x: %f, buffer->y: %f, buffer->z: %f\n\n", buffer->x, buffer->y, buffer->z);
 	
 	// Translate Around X-Axis
 	angle = points_to_angle_2d(rotation_point->y, rotation_point->z, target_point->y, target_point->z);
-	printf("com angle x: %f\n", angle * 180.0 / M_PI);
 	angle -= rotation_delta->x;
-	printf("sum angle x: %f\n", angle * 180.0 / M_PI);
 	angle_to_points_2d(angle, sqrtf(	(target_point->y - rotation_point->y) * (target_point->y - rotation_point->y) + \
 												(buffer->z - rotation_point->z) * (buffer->z - rotation_point->z) ), \
 												rotation_point->y, rotation_point->z, &(buffer->y), &(buffer->z));
