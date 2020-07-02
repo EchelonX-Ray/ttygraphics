@@ -38,6 +38,8 @@ struct slope {
 
 unsigned int is_in_fov(struct camera* c, struct matrix* m);
 void translate_rotation(struct matrix* point, struct matrix* rotation_point, struct matrix* rotation_delta, struct matrix* buffer);
+float points_to_angle_2d(float x1, float y1, float x2, float y2);
+void angle_to_points_2d(float angle, float magnitude, float x1, float y1, float* x2, float* y2);
 //unsigned int greater_than_point(struct matrix* po, struct matrix* p1, struct matrix* p2);
 //unsigned int less_than_point(struct matrix* po, struct matrix* p1, struct matrix* p2);
 void add_m(struct matrix* m1, struct matrix* m2, struct matrix* mr);
@@ -242,7 +244,7 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	box.lines[11].p0.x = -1.0;
 	box.lines[11].p0.y = -1.0;
 	box.lines[11].p0.z = -1.0;
-	box.lines[11].p1.x = -1.0;
+	box.lines[11].p1.x = -50.0;
 	box.lines[11].p1.y = -1.0;
 	box.lines[11].p1.z = +1.0;
 	
@@ -415,10 +417,11 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m) {
 		}
 	}
 	
-	printf("x_angle: %f\n", (x_angle * 180) / M_PI);
-	printf("y_angle: %f\n", (y_angle * 180) / M_PI);
+	printf("x_angle: %f\n", x_angle * 180.0 / M_PI);
+	printf("y_angle: %f\n", y_angle * 180.0 / M_PI);
 	printf("\n");
 	
+	/*
 	float l_xangle;
 	float h_xangle;
 	float l_yangle;
@@ -456,6 +459,8 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m) {
 	printf("low_angle: x = %f, y = %f, z = %f\n", low_angle.x, low_angle.y, low_angle.z);
 	printf("high_angle: x = %f, y = %f, z = %f\n", high_angle.x, high_angle.y, high_angle.z);
 	printf("\n");
+	*/
+	
 	
 	struct matrix buffer;
 	struct matrix rotation_delta;
@@ -464,6 +469,40 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m) {
 	rotation_delta.z = 0.0;
 	translate_rotation(m, &(c->location), &rotation_delta, &buffer);
 	
+	float h_xslope;
+	float h_yslope;
+	float l_xslope;
+	float l_yslope;
+	float h_xoffset;
+	float h_yoffset;
+	float l_xoffset;
+	float l_yoffset;
+	h_xslope = tan((c->h_fov * M_PI) / 360.0);
+	h_yslope = tan((c->v_fov * M_PI) / 360.0);
+	l_xslope = -h_xslope;
+	l_yslope = -h_yslope;
+	h_xoffset = c->location.x - (h_xslope * c->location.z);
+	h_yoffset = c->location.y - (h_yslope * c->location.z);
+	l_xoffset = c->location.y - (l_yslope * c->location.z);
+	l_yoffset = c->location.x - (l_xslope * c->location.z);
+	
+	printf("m->x: %f, m->y: %f, m->z: %f\n", m->x, m->y, m->z);
+	printf("b->x: %f, b->y: %f, b->z: %f\n", buffer.x, buffer.y, buffer.z);
+	
+	if (buffer.x > (h_xslope * buffer.z) + h_xoffset) {
+		return 0;
+	}
+	if (buffer.x < (l_xslope * buffer.z) + l_xoffset) {
+		return 0;
+	}
+	if (buffer.y > (h_yslope * buffer.z) + h_yoffset) {
+		return 0;
+	}
+	if (buffer.y < (l_yslope * buffer.z) + l_yoffset) {
+		return 0;
+	}
+	
+	/*
 	// Calculate x-y y-z x-z for low_angle
 	//struct slope la_x_y;
 	struct slope la_y_z;
@@ -682,20 +721,45 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m) {
 			}
 		}
 	}
+	*/
 	
 	return 1;
 }
-void translate_rotation(struct matrix* point, struct matrix* rotation_point, struct matrix* rotation_delta, struct matrix* buffer) {
-	float delta_x = point->x - rotation_point->x;
-	float delta_y = point->y - rotation_point->y;
-	float delta_z = point->z - rotation_point->z; //TODO
+void translate_rotation(struct matrix* target_point, struct matrix* rotation_point, struct matrix* rotation_delta, struct matrix* buffer) {
+	float delta_x = target_point->x - rotation_point->x;
+	float delta_y = target_point->y - rotation_point->y;
+	float delta_z = target_point->z - rotation_point->z; //TODO
 	float tmp_var;
+	float angle;
+	
+	printf("target_point-> x:%f, y:%f, z:%f\n", target_point->x, target_point->y, target_point->z);
+	printf("rotation_point-> x:%f, y:%f, z:%f\n", rotation_point->x, rotation_point->y, rotation_point->z);
+	printf("rotation_delta-> x:%f, y:%f, z:%f\n", rotation_delta->x * 180.0 / M_PI, rotation_delta->y * 180.0 / M_PI, rotation_delta->z * 180.0 / M_PI);
+	printf("delta_x: %f, delta_y: %f, delta_z: %f\n", delta_x, delta_y, delta_z);
 	
 	// Translate Around Y-Axis
+	angle = points_to_angle_2d(target_point->x, target_point->z, rotation_point->x, rotation_point->z);
+	printf("com angle y: %f\n", angle * 180.0 / M_PI);
+	angle += rotation_delta->y;
+	printf("sum angle y: %f\n", angle * 180.0 / M_PI);
+	angle_to_points_2d(angle, sqrtf((target_point->x + rotation_point->x) + (target_point->z * rotation_point->z)), rotation_point->x, rotation_point->z, &(buffer->x), &(buffer->z));
+	
+	// Translate Around X-Axis
+	angle = points_to_angle_2d(target_point->y, buffer->z, rotation_point->y, rotation_point->z);
+	printf("com angle x: %f\n", angle * 180.0 / M_PI);
+	angle += rotation_delta->x;
+	printf("sum angle x: %f\n", angle * 180.0 / M_PI);
+	angle_to_points_2d(angle, sqrtf((target_point->y + rotation_point->y) + (buffer->z * buffer->z)), rotation_point->y, rotation_point->z, &(buffer->y), &(buffer->z));
+	printf("buffer->x: %f, buffer->y: %f, buffer->z: %f\n", buffer->x, buffer->y, buffer->z);
+	
+	return;
+	
 	tmp_var = sqrtf((delta_x * delta_x) + (delta_z * delta_z));
+	angle = asinf(delta_x / tmp_var);
 	delta_x = sinf(rotation_delta->y) * tmp_var;
 	delta_z = cosf(rotation_delta->y) * tmp_var;
 	buffer->x = rotation_point->x + delta_x;
+	//printf("buffer->x: %f, rotation_delta->y: %f, tmp_var: %f, delta_x: %f, delta_z: %f, ", buffer->x, rotation_delta->y, tmp_var, delta_x, delta_z);
 	//buffer->z = rotation_point->z + delta_z;
 	// Translate Around X-Axis
 	tmp_var = sqrtf((delta_y * delta_y) + (delta_z * delta_z));
@@ -703,7 +767,29 @@ void translate_rotation(struct matrix* point, struct matrix* rotation_point, str
 	delta_z = cosf(rotation_delta->x) * tmp_var;
 	buffer->y = rotation_point->y + delta_y;
 	buffer->z = rotation_point->z + delta_z;
+	//printf("delta_z: %f, delta_y: %f, buffer->y: %f, buffer->z: %f\n", delta_z, delta_y, buffer->y, buffer->z);
 	
+	return;
+}
+float points_to_angle_2d(float x1, float y1, float x2, float y2) {
+	x2 -= x1;
+	y2 -= y1;
+	if (x2 == 0) {
+		x1 = atanf(0);
+	} else {
+		x1 = atanf(x2 / y2);
+	}
+	if (y2 < 0) {
+		x1 += M_PI;
+	}
+	if (x1 > M_PI) {
+		x1 -= M_PI * 2;
+	}
+	return x1;
+}
+void angle_to_points_2d(float angle, float magnitude, float x1, float y1, float* x2, float* y2) {
+	*x2 = x1 + sinf(angle) * magnitude;
+	*y2 = y1 + cosf(angle) * magnitude;
 	return;
 }
 /*
