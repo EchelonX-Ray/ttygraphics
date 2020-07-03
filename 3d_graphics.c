@@ -337,7 +337,7 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	
 	cam.location.x =  10.0;
 	cam.location.y =   0.0;
-	cam.location.z =  -8.5;
+	cam.location.z =   0.0;
 	cam.looking_at.x =   0.0;
 	cam.looking_at.y =   0.0;
 	cam.looking_at.z =   0.0;
