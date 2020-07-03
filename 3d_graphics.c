@@ -41,8 +41,11 @@ struct slope {
 
 void hfunc_SIGINT(int sig); // SIGINT Signal Handler.  This is not registered until just before the pthreads are setup.
 void* rotate_camera_func(void* ptr); // pThread Thread Function
+unsigned int DEBUG_is_in_fov(struct camera* c, struct matrix* m, struct matrix* buffer);
 unsigned int is_in_fov(struct camera* c, struct matrix* m, struct matrix* buffer);
+void DEBUG_translate_rotation(struct matrix* point, struct matrix* rotation_point, struct matrix* rotation_delta, struct matrix* buffer);
 void translate_rotation(struct matrix* point, struct matrix* rotation_point, struct matrix* rotation_delta, struct matrix* buffer);
+float DEBUG_points_to_angle_2d(float x1, float y1, float x2, float y2);
 float points_to_angle_2d(float x1, float y1, float x2, float y2);
 void angle_to_points_2d(float angle, float magnitude, float x1, float y1, float* x2, float* y2);
 //unsigned int greater_than_point(struct matrix* po, struct matrix* p1, struct matrix* p2);
@@ -89,7 +92,6 @@ void* rotate_camera_func(void* ptr) {
 		cam_x = cam->location.x;
 		cam_z = cam->location.z;
 		angle = points_to_angle_2d(0.0, 0.0, cam_x, cam_z);
-		//angle = points_to_angle_2d(0.0, 0.0, cam_z, cam_x);
 		angle += M_PI_2 / 90.0;
 		angle_to_points_2d(angle, sqrt((cam->location.x * cam->location.x) + (cam->location.z * cam->location.z)), 0, 0, &cam_x, &cam_z);
 		cam->location.x = cam_x;
@@ -335,7 +337,7 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	
 	cam.location.x =  10.0;
 	cam.location.y =   0.0;
-	cam.location.z =  10.0;
+	cam.location.z =  -8.5;
 	cam.looking_at.x =   0.0;
 	cam.looking_at.y =   0.0;
 	cam.looking_at.z =   0.0;
@@ -371,7 +373,6 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 		return 10;
 	}
 	
-	struct matrix buffer;
 	unsigned int old_points[8];
 	old_points[0] = 0;
 	old_points[1] = 0;
@@ -381,26 +382,35 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	old_points[5] = 0;
 	old_points[6] = 0;
 	old_points[7] = 0;
+	struct matrix buffer;
 	uint32_t color;
 	unsigned int i;
 	unsigned int x;
 	unsigned int y;
+	unsigned int in_fov;
 	while (running) {
-		pthread_mutex_lock(&mutex);
 		i = 0;
 		while (i < 8) {
-			if (is_in_fov(&cam, &(box.lines[i].p0), &buffer)) {
+			pthread_mutex_lock(&mutex);
+			in_fov = is_in_fov(&cam, &(box.lines[i].p0), &buffer);
+			if (in_fov == 0) {
+				printf("i: %d\n", i);
+				DEBUG_is_in_fov(&cam, &(box.lines[i].p0), &buffer);
+			}
+			pthread_mutex_unlock(&mutex);
+			if (in_fov) {
 				color = pt_colors[i];
 				x = buffer.x / cam.h_fov * vinfo.xres;
 				y = buffer.y / cam.v_fov * vinfo.yres;
 				mcolor[old_points[i]] = 0x00000000;
 				old_points[i] = y * vinfo.xres + x;
 				mcolor[old_points[i]] = color;
+			} else {
+				printf("Failure: Out of camera FOV.\n");
 			}
 			i++;
 		}
 		cam.frame_counter++;
-		pthread_mutex_unlock(&mutex);
 	}
 	
 	// Close and destroy threads
@@ -414,7 +424,97 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	
 	return 0;
 }
-
+unsigned int DEBUG_is_in_fov(struct camera* c, struct matrix* m, struct matrix *buffer) {
+	// Translate point(struct matrix* m) to the camera angles
+	struct matrix buffer2;
+	struct matrix rotation_delta;
+	struct matrix tmp_cam_loc;
+	rotation_delta.z = 0.0;
+	rotation_delta.y = DEBUG_points_to_angle_2d(c->location.x, c->location.z, c->looking_at.x, c->looking_at.z);
+	if (c->looking_at.z - c->location.z < 0.0) {
+		rotation_delta.x = DEBUG_points_to_angle_2d(c->location.y, c->looking_at.z, c->looking_at.y, c->location.z);
+	} else {
+		rotation_delta.x = DEBUG_points_to_angle_2d(c->location.y, c->location.z, c->looking_at.y, c->looking_at.z);
+	}
+	printf("rotd_x: %11.6f, rotd_y: %11.6f\n", rotation_delta.x * 180 / M_PI, rotation_delta.y * 180 / M_PI);
+	tmp_cam_loc.x = c->location.x;
+	tmp_cam_loc.y = c->location.y;
+	tmp_cam_loc.z = c->location.z;
+	printf("point.x: %11.6f, point.y: %11.6f, point.z: %11.6f\n", m->x, m->y, m->z);
+	DEBUG_translate_rotation(m, &tmp_cam_loc, &rotation_delta, &buffer2);
+	printf("camera.looking_at.x: %11.6f, camera.looking_at.y: %11.6f, camera.looking_at.z: %11.6f\n", c->looking_at.x, c->looking_at.y, c->looking_at.z);
+	printf("camera.location.x: %11.6f, camera.location.y: %11.6f, camera.location.z: %11.6f\n", c->location.x, c->location.y, c->location.z);
+	printf("buffer2.x: %11.6f, buffer2.y: %11.6f, buffer2.z: %11.6f\n", buffer2.x, buffer2.y, buffer2.z);
+	//printf("cx: %11.6f, cy: %11.6f, cz: %11.6f, bx: %11.6f, by: %11.6f, bz: %11.6f\n", c->location.x, c->location.y, c->location.z, buffer2.x, buffer2.y, buffer2.z);
+	//exit(0);
+	
+	// Find the max and min slopes and offsets, per the equation [y = mx + b], for the camera's FOV and location.
+	// The camera is assumed to be pointing straight forward with no angles since the point is translated to 
+	// match it above instead.  4 relationships are computed: A min and max corresponding to the camera's FOV 
+	// along the x/z and y/z axis.
+	
+	// Variable Nameing Convention:
+	//   Minimums are prefixed with l_ and Maximums are prefixed with h_
+	//   Association of the Z-Axis as the x varable in the equation [y = mx + b] is assumed.
+	//   The value with an association to the y varable in the equation [y = mx + b], is specifed by the value after l_ or h_.
+	//   Whether the value is associated with m or b is indicated by weather it is suffixed with a slope or offset, respectively.
+	float h_xslope;
+	float h_yslope;
+	float l_xslope;
+	float l_yslope;
+	float h_xoffset;
+	float h_yoffset;
+	float l_xoffset;
+	float l_yoffset;
+	h_xslope = tanf((c->h_fov * M_PI) / 360.0);
+	h_yslope = tanf((c->v_fov * M_PI) / 360.0);
+	l_xslope = -h_xslope;
+	l_yslope = -h_yslope;
+	h_xoffset = c->location.x - (h_xslope * c->location.z);
+	h_yoffset = c->location.y - (h_yslope * c->location.z);
+	l_xoffset = c->location.x - (l_xslope * c->location.z);
+	l_yoffset = c->location.y - (l_yslope * c->location.z);
+	
+	// Plug the values into the 4 computed equations and determine whether the point is outside the camera's FOV.
+	// If it is, return 0.
+	if (buffer2.x > (h_xslope * buffer2.z) + h_xoffset) {
+		printf("TraceA\n");
+		exit(50);
+		return 0;
+	}
+	if (buffer2.x < (l_xslope * buffer2.z) + l_xoffset) {
+		printf("TraceB\n");
+		exit(50);
+		return 0;
+	}
+	if (buffer2.y > (h_yslope * buffer2.z) + h_yoffset) {
+		printf("TraceC\n");
+		exit(50);
+		return 0;
+	}
+	if (buffer2.y < (l_yslope * buffer2.z) + l_yoffset) {
+		printf("TraceD\n");
+		exit(50);
+		return 0;
+	}
+	
+	// If we have made it this far, we are in the camera's FOV.  So we should:
+	//   -Store in the return buffer, the proportion of the location of the point, to the camera's FOV, for the x and y axis.
+	//   --Translate as necessary such that the minimum X and Y FOVs start at 0 and not at -0.5 * (FOV angle).
+	//   -Return 1.
+	float x;
+	float y;
+	float z;
+	//printf("cam.x: %f, cam.y: %f, cam.z: %f\n", c->location.x, c->location.y, c->location.z);
+	//printf("buffer2.x: %f, buffer2.y: %f, buffer2.z: %f\n", buffer2.x, buffer2.y, buffer2.z);
+	x = DEBUG_points_to_angle_2d(c->location.x, c->location.z, buffer2.x, buffer2.z) * 180 / M_PI + (c->h_fov / 2);
+	y = DEBUG_points_to_angle_2d(c->location.y, c->location.z, buffer2.y, buffer2.z) * 180 / M_PI + (c->v_fov / 2);
+	z = 0.0; // This value is not used.
+	buffer->x = x;
+	buffer->y = y;
+	buffer->z = z;
+	return 1;
+}
 unsigned int is_in_fov(struct camera* c, struct matrix* m, struct matrix *buffer) {
 	// Translate point(struct matrix* m) to the camera angles
 	struct matrix buffer2;
@@ -422,7 +522,11 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m, struct matrix *buffer
 	struct matrix tmp_cam_loc;
 	rotation_delta.z = 0.0;
 	rotation_delta.y = points_to_angle_2d(c->location.x, c->location.z, c->looking_at.x, c->looking_at.z);
-	rotation_delta.x = points_to_angle_2d(c->location.y, c->location.z, c->looking_at.y, c->looking_at.z);
+	if (c->looking_at.z - c->location.z < 0.0) {
+		rotation_delta.x = points_to_angle_2d(c->location.y, c->looking_at.z, c->looking_at.y, c->location.z);
+	} else {
+		rotation_delta.x = points_to_angle_2d(c->location.y, c->location.z, c->looking_at.y, c->looking_at.z);
+	}
 	//printf("rotd_x: %11.6f, rotd_y: %11.6f\n", rotation_delta.x * 180 / M_PI, rotation_delta.y * 180 / M_PI);
 	tmp_cam_loc.x = c->location.x;
 	tmp_cam_loc.y = c->location.y;
@@ -449,14 +553,14 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m, struct matrix *buffer
 	float h_yoffset;
 	float l_xoffset;
 	float l_yoffset;
-	h_xslope = tan((c->h_fov * M_PI) / 360.0);
-	h_yslope = tan((c->v_fov * M_PI) / 360.0);
+	h_xslope = tanf((c->h_fov * M_PI) / 360.0);
+	h_yslope = tanf((c->v_fov * M_PI) / 360.0);
 	l_xslope = -h_xslope;
 	l_yslope = -h_yslope;
 	h_xoffset = c->location.x - (h_xslope * c->location.z);
 	h_yoffset = c->location.y - (h_yslope * c->location.z);
-	l_xoffset = c->location.y - (l_yslope * c->location.z);
-	l_yoffset = c->location.x - (l_xslope * c->location.z);
+	l_xoffset = c->location.x - (l_xslope * c->location.z);
+	l_yoffset = c->location.y - (l_yslope * c->location.z);
 	
 	// Plug the values into the 4 computed equations and determine whether the point is outside the camera's FOV.
 	// If it is, return 0.
@@ -526,11 +630,73 @@ void translate_rotation(struct matrix* target_point, struct matrix* rotation_poi
 	
 	return;
 }
+void DEBUG_translate_rotation(struct matrix* target_point, struct matrix* rotation_point, struct matrix* rotation_delta, struct matrix* buffer) {
+	float delta_x = target_point->x - rotation_point->x;
+	float delta_y = target_point->y - rotation_point->y;
+	float delta_z = target_point->z - rotation_point->z;
+	float angle;
+	buffer->x = 0.0;
+	buffer->y = 0.0;
+	buffer->z = 0.0;
+	
+	// Translate Around Y-Axis
+	angle = points_to_angle_2d(rotation_point->x, rotation_point->z, target_point->x, target_point->z);
+	printf("(Stage1) angle1: %f\n", angle * 180 / M_PI);
+	angle -= rotation_delta->y;
+	printf("(Stage1) angle2: %f\n", angle * 180 / M_PI);
+	angle_to_points_2d(angle, sqrtf( (delta_x * delta_x) + \
+												(delta_z * delta_z) ), \
+												rotation_point->x, rotation_point->z, &(buffer->x), &(buffer->z));
+	printf("(Stage1) buffer->x: %11.6f, buffer->y: %11.6f, buffer->z: %11.6f\n", buffer->x, buffer->y, buffer->z);
+	
+	// Translate Around X-Axis
+	angle = points_to_angle_2d(rotation_point->y, rotation_point->z, target_point->y, buffer->z);
+	printf("(Stage2) angle1: %f\n", angle * 180 / M_PI);
+	angle -= rotation_delta->x;
+	printf("(Stage2) angle2: %f\n", angle * 180 / M_PI);
+	angle_to_points_2d(angle, sqrtf(	(delta_y * delta_y) + \
+												((buffer->z - rotation_point->z) * (buffer->z - rotation_point->z)) ), \
+												rotation_point->y, rotation_point->z, &(buffer->y), &(buffer->z));
+	printf("(Stage2) buffer->x: %11.6f, buffer->y: %11.6f, buffer->z: %11.6f\n", buffer->x, buffer->y, buffer->z);
+	
+	return;
+}
+float DEBUG_points_to_angle_2d(float x1, float y1, float x2, float y2) {	
+	x2 -= x1;
+	y2 -= y1;
+	printf("pta x2: %f, y2: %f\n", x2, y2);
+	if (x2 == 0.0) {
+		if (y2 < 0.0) {
+			return M_PI;
+		} else {
+			return 0.0;
+		}
+	} else {
+		if (y2 == 0.0) {
+			if (x2 < 0.0) {
+				return -M_PI_2;
+			} else {
+				return M_PI_2;
+			}
+		} else {
+			if (y2 < 0.0) {
+				if (x2 < 0.0) {
+					return -M_PI_2 - atanf(y2 / x2);
+				} else {
+					return M_PI_2 - atanf(y2 / x2);
+				}
+			} else {
+				return atanf(x2 / y2);
+			}
+		}
+	}
+	return 0.0;
+}
 float points_to_angle_2d(float x1, float y1, float x2, float y2) {
 	x2 -= x1;
 	y2 -= y1;
 	if (x2 == 0) {
-		x1 = atanf(0);
+		x1 = 0; // atanf(0) == 0
 	} else {
 		x1 = atanf(x2 / y2);
 	}
@@ -541,6 +707,36 @@ float points_to_angle_2d(float x1, float y1, float x2, float y2) {
 		x1 -= M_PI * 2;
 	}
 	return x1;
+	/*
+	x2 -= x1;
+	y2 -= y1;
+	if (x2 == 0.0) {
+		if (y2 < 0.0) {
+			return M_PI;
+		} else {
+			return 0.0;
+		}
+	} else {
+		if (y2 == 0.0) {
+			if (x2 < 0.0) {
+				return -M_PI_2;
+			} else {
+				return M_PI_2;
+			}
+		} else {
+			if (y2 < 0.0) {
+				if (x2 < 0.0) {
+					return -M_PI_2 - atanf(y2 / x2);
+				} else {
+					return M_PI_2 - atanf(y2 / x2);
+				}
+			} else {
+				return atanf(x2 / y2);
+			}
+		}
+	}
+	return 0.0;
+	*/
 }
 void angle_to_points_2d(float angle, float magnitude, float x1, float y1, float* x2, float* y2) {
 	*x2 = x1 + sinf(angle) * magnitude;
