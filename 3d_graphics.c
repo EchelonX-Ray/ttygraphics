@@ -6,11 +6,13 @@
 #include <linux/fb.h>
 #include <unistd.h>
 #include <signal.h>
-#include <stdio.h>
 #include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 #include <math.h>
+#include <pthread.h>
 
 struct matrix {
 	float x;
@@ -25,10 +27,11 @@ struct cube {
 	struct line lines[12];
 };
 struct camera {
-	struct matrix location;
+	volatile struct matrix location;
 	struct matrix looking_at;
 	float h_fov;
 	float v_fov;
+	volatile unsigned int frame_counter;
 };
 struct slope {
 	unsigned int type;
@@ -36,6 +39,8 @@ struct slope {
 	float offset;
 };
 
+void hfunc_SIGINT(int sig); // SIGINT Signal Handler.  This is not registered until just before the pthreads are setup.
+void* rotate_camera_func(void* ptr); // pThread Thread Function
 unsigned int is_in_fov(struct camera* c, struct matrix* m, struct matrix* buffer);
 void translate_rotation(struct matrix* point, struct matrix* rotation_point, struct matrix* rotation_delta, struct matrix* buffer);
 float points_to_angle_2d(float x1, float y1, float x2, float y2);
@@ -46,6 +51,57 @@ void add_m(struct matrix* m1, struct matrix* m2, struct matrix* mr);
 void sub_m(struct matrix* m1, struct matrix* m2, struct matrix* mr);
 //void mul_m(struct matrix* m1, struct matrix* m2, struct matrix* mr);
 //void div_m(struct matrix* m1, struct matrix* m2, struct matrix* mr);
+
+volatile unsigned int running;
+signed int fpid;
+pthread_mutex_t mutex;
+
+void hfunc_SIGINT(int sig) {
+	if (fpid > 0) {
+		printf("\nSIGINT caught, relaying SIGINT to child.  Please wait.\n");
+		if (kill(fpid, SIGINT)) {
+			printf("Error: kill() failed to send SIGINT to child.  Parent is calling exit(11)\n");
+			exit(11);
+		}
+		return;
+	}
+	
+	running = 0;
+	return;
+}
+
+void* rotate_camera_func(void* ptr) {
+	struct camera* cam = (struct camera*)ptr;
+	
+	unsigned int sec = 0;
+	unsigned int fps = 0;
+	while (running) {
+		pthread_mutex_lock(&mutex);
+		if(sec >= 100) {
+			sec = 0;
+			fps = cam->frame_counter;
+			cam->frame_counter = 0;
+			printf("FPS: %d\n", fps);
+		}
+		float angle;
+		float cam_x;
+		float cam_z;
+		cam_x = cam->location.x;
+		cam_z = cam->location.z;
+		angle = points_to_angle_2d(0.0, 0.0, cam_x, cam_z);
+		//angle = points_to_angle_2d(0.0, 0.0, cam_z, cam_x);
+		angle += M_PI_2 / 90.0;
+		angle_to_points_2d(angle, sqrt((cam->location.x * cam->location.x) + (cam->location.z * cam->location.z)), 0, 0, &cam_x, &cam_z);
+		cam->location.x = cam_x;
+		cam->location.z = cam_z;
+		//printf("angle: %11.6f, cam.x: %11.6f, cam.y: %11.6f, cam.z: %11.6f\n", angle * 180 / M_PI, cam_x, cam->location.y, cam_z);
+		pthread_mutex_unlock(&mutex);
+		usleep(10000);
+		sec++;
+	}
+	
+	return 0;
+}
 
 signed int main(signed int argc, char* argv[], char* envp[]) {
 	
@@ -60,51 +116,68 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	
 	struct sigaction new_action;
 	new_action.sa_handler = 0;
-	new_action.sa_sigaction = 0;
 	sigemptyset(&(new_action.sa_mask));
 	new_action.sa_flags = SA_NOCLDSTOP;
-	new_action.sa_restorer = 0;
 	struct sigaction old_action;
 	
 	if (sigaction(SIGCHLD, &new_action, &old_action) != 0) {
-		printf("SIGCHLD Action Flag Change Failed!\n");
+		printf("Error: SIGCHLD Action Flag Change Failed!\n");
 		return 1;
 	}
 	
 	signed int fd;
-	unsigned long request;
 	signed int ret_val = 0;
 	
 	fd = 1;
 	//fd = open("/dev/tty6", O_RDWR);
 	if (fd < 0) {
-		printf("Invaild fd.  Possible open() failure!  Stage-1\n");
+		printf("Error: Invaild fd.  Possible open() failure!  Stage-1\n");
 		return 4;
 	}
 	
 	//ret_val = ioctl(fd, KDSETMODE, 1);
 	if (ret_val != 0) {
-		printf("Failure Setting TTY Mode: To Graphical!\n");
+		printf("Error: Failure Setting TTY Mode: To Graphical!\n");
 		printf("errno: %s\n", strerror(errno));
 		return 3;
 	}
 	//close(fd);
 	
-	signed int fpid = 0;
 	fpid = fork();
-
+	
 	if (fpid > 0) {
 		// Parent
-		wait(0);
+		new_action.sa_handler = hfunc_SIGINT;
+		sigemptyset(&(new_action.sa_mask));
+		new_action.sa_flags = 0;
+		if (sigaction(SIGINT, &new_action, 0) != 0) {
+			printf("Error: SIGINT Handler Registration Failed! - Parent\n");
+			return 8;
+		}
+		
+		int fpid_ret_val;
+		retry_waitpid:
+		fpid_ret_val = 0;
+		if (waitpid(fpid, &fpid_ret_val, 0) == -1) {
+			if (errno == EINTR) {
+				goto retry_waitpid;
+			}
+			printf("Error: waitpid() failed: %s\n", strerror(errno));
+			return 11;
+		}
+		fpid_ret_val = WEXITSTATUS(fpid_ret_val);
+		if (fpid_ret_val != 0) {
+			printf("Error: Child exited with non-zero code: %d\nParent is continuing normal exit.\n", fpid_ret_val);
+		}
 		
 		//fd = open("/dev/tty6", O_RDWR);
 		if (fd < 0) {
-			printf("Invaild fd.  Possible open() failure!  Stage-2\n");
+			printf("Error: Invaild fd.  Possible open() failure!  Stage-2\n");
 			return 4;
 		}
 		//ret_val = ioctl(fd, KDSETMODE, 0);
 		if (ret_val != 0) {
-			printf("Failure Setting TTY Mode: To Text!\n");
+			printf("Error: Failure Setting TTY Mode: To Text!\n");
 			printf("errno: %s\n", strerror(errno));
 			return 3;
 		}
@@ -114,12 +187,12 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	} else if (fpid == 0) {
 		// Child
 		if (sigaction(SIGCHLD, &old_action, 0) != 0) {
-			printf("SIGCHLD Action Restoration Failed!\n");
+			printf("Error: SIGCHLD Action Restoration Failed!\n");
 			return 1;
 		}
 	} else {
 		// Fork Failed
-		printf("Fork Failed\n");
+		printf("Error: Fork Failed\n");
 		return 2;
 	}
 	
@@ -129,32 +202,31 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	
 	fd = open("/dev/fb0", O_RDWR);
 	if (fd < 0) {
-		printf("Invaild fd.  Possible open() failure!  Stage-3\n");
+		printf("Error: Invaild fd.  Possible open() failure!  Stage-3\n");
 		return 4;
 	}
 	
 	if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) != 0) {
-		printf("Error reading fixed information\n");
+		printf("Error: Error reading fixed information\n");
 		return 5;
 	}
 	if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) != 0) {
-		printf("Error reading variable information\n");
+		printf("Error: Error reading variable information\n");
 		return 5;
 	}
 	
 	printf("Vinfo: Res - %dx%d, BPP - %d\n", vinfo.xres, vinfo.yres, vinfo.bits_per_pixel);
 	
 	if (vinfo.bits_per_pixel != 32) {
-		printf("Wrong bits per pixel!\n");
+		printf("Error: Wrong bits per pixel!\n");
 		return 6;
 	}
 	
 	uint32_t* mcolor;
 	void* ptr = 0;
-	unsigned int screensize = vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8;
 	
 	errno = 0;
-	ptr = mmap(ptr, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	ptr = mmap(ptr, vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (ptr == MAP_FAILED || ptr == 0 || errno != 0) {
 		printf("Error: mmap() Failed!  Could not create virtual address space mapping!\n");
 		printf("errno: %s\n", strerror(errno));
@@ -221,6 +293,7 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	box.lines[ 7].p1.y = +1.0;
 	box.lines[ 7].p1.z = +1.0;
 	
+	/*
 	box.lines[ 8].p0.x = -1.0;
 	box.lines[ 8].p0.y = +1.0;
 	box.lines[ 8].p0.z = -1.0;
@@ -248,6 +321,7 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	box.lines[11].p1.x = -1.0;
 	box.lines[11].p1.y = -1.0;
 	box.lines[11].p1.z = +1.0;
+	*/
 	
 	uint32_t pt_colors[8];
 	pt_colors[ 0] = 0x00FFFFFF;
@@ -259,9 +333,9 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	pt_colors[ 6] = 0x00FF0000;
 	pt_colors[ 7] = 0x007F7F7F;
 	
-	cam.location.x =   0.0;
+	cam.location.x =  10.0;
 	cam.location.y =   0.0;
-	cam.location.z = -10.0;
+	cam.location.z =  10.0;
 	cam.looking_at.x =   0.0;
 	cam.looking_at.y =   0.0;
 	cam.looking_at.z =   0.0;
@@ -276,78 +350,65 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 		cam.h_fov = (max_fov_degrees * vinfo.xres) / vinfo.yres;
 	}
 	
-	struct matrix buffer;
-	uint32_t color = 0;
-	unsigned int i = 0;
-	//unsigned int a = 0;
-	unsigned int x = 0;
-	unsigned int y = 0;
-	while (i < 8) {
-		//printf("\n------------------------------\n\n");
-		//printf("ia: %d\n", i);
-		if (is_in_fov(&cam, &(box.lines[i].p0), &buffer)) {
-			/*
-			color = 0x00FFFFFF;
-			x = 0;
-			while (x < 20) {
-				y = 0;
-				while (y < 20) {
-					mcolor[(y * vinfo.xres) + x + a] = color;
-					y++;
-				}
-				x++;
-			}
-			*/
-			
-			//color = 0x0000FF00;
-			color = pt_colors[i];
-			x = buffer.x / cam.h_fov * vinfo.xres;
-			y = buffer.y / cam.v_fov * vinfo.yres;
-			mcolor[y * vinfo.xres + x] = color;
-			
-			//printf("ia: Success\n", i);
-		}// else {
-			//printf("ia: Failed\n", i);
-		//}
-		//printf("\n");
-		//a += 40;
-		
-		//printf("\n------------------------------\n\n");
-		//printf("ib: %d\n", i);
-		/*
-		if (is_in_fov(&cam, &(box.lines[i].p1), &buffer)) {
-			color = 0x00FFFFFF;
-			x = 0;
-			while (x < 20) {
-				y = 0;
-				while (y < 20) {
-					mcolor[(y * vinfo.xres) + x + a] = color;
-					y++;
-				}
-				x++;
-			}
-			
-			color = 0x0000FF00;
-			x = buffer.x * vinfo.xres / cam.h_fov;
-			y = buffer.y * vinfo.yres / cam.v_fov;
-			mcolor[y * vinfo.xres + x] = color;
-			
-			//printf("ib: Success\n", i);
-		}// else {
-			//printf("ib: Failed\n", i);
-		//}
-		*/
-		//printf("\n");
-		//a += 40;
-		
-		i++;
+	// Create New Thread
+	new_action.sa_handler = hfunc_SIGINT;
+	sigemptyset(&(new_action.sa_mask));
+	new_action.sa_flags = 0;
+	if (sigaction(SIGINT, &new_action, 0) != 0) {
+		printf("Error: SIGINT Handler Registration Failed! - Child\n");
+		return 8;
 	}
 	
-	sleep(1);
+	cam.frame_counter = 0;
+	running = 1;
+	pthread_t rotate_camera_thread;
+	if(pthread_mutex_init(&mutex, 0)) {
+		printf("Error: Error creating mutex\n");
+		return 9;
+	}
+	if(pthread_create(&rotate_camera_thread, 0, rotate_camera_func, &cam)) {
+		printf("Error: Error creating thread\n");
+		return 10;
+	}
 	
-	end:
+	struct matrix buffer;
+	unsigned int old_points[8];
+	old_points[0] = 0;
+	old_points[1] = 0;
+	old_points[2] = 0;
+	old_points[3] = 0;
+	old_points[4] = 0;
+	old_points[5] = 0;
+	old_points[6] = 0;
+	old_points[7] = 0;
+	uint32_t color;
+	unsigned int i;
+	unsigned int x;
+	unsigned int y;
+	while (running) {
+		pthread_mutex_lock(&mutex);
+		i = 0;
+		while (i < 8) {
+			if (is_in_fov(&cam, &(box.lines[i].p0), &buffer)) {
+				color = pt_colors[i];
+				x = buffer.x / cam.h_fov * vinfo.xres;
+				y = buffer.y / cam.v_fov * vinfo.yres;
+				mcolor[old_points[i]] = 0x00000000;
+				old_points[i] = y * vinfo.xres + x;
+				mcolor[old_points[i]] = color;
+			}
+			i++;
+		}
+		cam.frame_counter++;
+		pthread_mutex_unlock(&mutex);
+	}
 	
-	munmap(ptr, screensize);
+	// Close and destroy threads
+	running = 0;
+	pthread_join(rotate_camera_thread, 0);
+	pthread_mutex_destroy(&mutex);
+	
+	munmap(ptr, vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8);
 	
 	close(fd);
 	
@@ -358,10 +419,17 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m, struct matrix *buffer
 	// Translate point(struct matrix* m) to the camera angles
 	struct matrix buffer2;
 	struct matrix rotation_delta;
+	struct matrix tmp_cam_loc;
 	rotation_delta.z = 0.0;
 	rotation_delta.y = points_to_angle_2d(c->location.x, c->location.z, c->looking_at.x, c->looking_at.z);
 	rotation_delta.x = points_to_angle_2d(c->location.y, c->location.z, c->looking_at.y, c->looking_at.z);
-	translate_rotation(m, &(c->location), &rotation_delta, &buffer2);
+	//printf("rotd_x: %11.6f, rotd_y: %11.6f\n", rotation_delta.x * 180 / M_PI, rotation_delta.y * 180 / M_PI);
+	tmp_cam_loc.x = c->location.x;
+	tmp_cam_loc.y = c->location.y;
+	tmp_cam_loc.z = c->location.z;
+	translate_rotation(m, &tmp_cam_loc, &rotation_delta, &buffer2);
+	//printf("cx: %11.6f, cy: %11.6f, cz: %11.6f, bx: %11.6f, by: %11.6f, bz: %11.6f\n", c->location.x, c->location.y, c->location.z, buffer2.x, buffer2.y, buffer2.z);
+	//exit(0);
 	
 	// Find the max and min slopes and offsets, per the equation [y = mx + b], for the camera's FOV and location.
 	// The camera is assumed to be pointing straight forward with no angles since the point is translated to 
@@ -393,15 +461,20 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m, struct matrix *buffer
 	// Plug the values into the 4 computed equations and determine whether the point is outside the camera's FOV.
 	// If it is, return 0.
 	if (buffer2.x > (h_xslope * buffer2.z) + h_xoffset) {
+		//printf("TraceA\n");
 		return 0;
 	}
 	if (buffer2.x < (l_xslope * buffer2.z) + l_xoffset) {
+		//printf("TraceB\n");
+		//exit(50);
 		return 0;
 	}
 	if (buffer2.y > (h_yslope * buffer2.z) + h_yoffset) {
+		//printf("TraceC\n");
 		return 0;
 	}
 	if (buffer2.y < (l_yslope * buffer2.z) + l_yoffset) {
+		//printf("TraceD\n");
 		return 0;
 	}
 	
@@ -409,16 +482,23 @@ unsigned int is_in_fov(struct camera* c, struct matrix* m, struct matrix *buffer
 	//   -Store in the return buffer, the proportion of the location of the point, to the camera's FOV, for the x and y axis.
 	//   --Translate as necessary such that the minimum X and Y FOVs start at 0 and not at -0.5 * (FOV angle).
 	//   -Return 1.
-	buffer->x = points_to_angle_2d(c->location.x, c->location.z, buffer2.x, buffer2.z) * 180 / M_PI + (c->h_fov / 2);
-	buffer->y = points_to_angle_2d(c->location.y, c->location.z, buffer2.y, buffer2.z) * 180 / M_PI + (c->v_fov / 2);
-	buffer->z = 0.0; // This value is not used.
+	float x;
+	float y;
+	float z;
+	//printf("cam.x: %f, cam.y: %f, cam.z: %f\n", c->location.x, c->location.y, c->location.z);
+	//printf("buffer2.x: %f, buffer2.y: %f, buffer2.z: %f\n", buffer2.x, buffer2.y, buffer2.z);
+	x = points_to_angle_2d(c->location.x, c->location.z, buffer2.x, buffer2.z) * 180 / M_PI + (c->h_fov / 2);
+	y = points_to_angle_2d(c->location.y, c->location.z, buffer2.y, buffer2.z) * 180 / M_PI + (c->v_fov / 2);
+	z = 0.0; // This value is not used.
+	buffer->x = x;
+	buffer->y = y;
+	buffer->z = z;
 	return 1;
 }
 void translate_rotation(struct matrix* target_point, struct matrix* rotation_point, struct matrix* rotation_delta, struct matrix* buffer) {
 	float delta_x = target_point->x - rotation_point->x;
 	float delta_y = target_point->y - rotation_point->y;
-	float delta_z = target_point->z - rotation_point->z; //TODO
-	float tmp_var;
+	float delta_z = target_point->z - rotation_point->z;
 	float angle;
 	buffer->x = 0.0;
 	buffer->y = 0.0;
@@ -426,17 +506,23 @@ void translate_rotation(struct matrix* target_point, struct matrix* rotation_poi
 	
 	// Translate Around Y-Axis
 	angle = points_to_angle_2d(rotation_point->x, rotation_point->z, target_point->x, target_point->z);
+	//printf("(Stage1) angle1: %f\n", angle * 180 / M_PI);
 	angle -= rotation_delta->y;
-	angle_to_points_2d(angle, sqrtf(	(target_point->x - rotation_point->x) * (target_point->x - rotation_point->x) + \
-												(target_point->z - rotation_point->z) * (target_point->z - rotation_point->z) ), \
+	//printf("(Stage1) angle2: %f\n", angle * 180 / M_PI);
+	angle_to_points_2d(angle, sqrtf( (delta_x * delta_x) + \
+												(delta_z * delta_z) ), \
 												rotation_point->x, rotation_point->z, &(buffer->x), &(buffer->z));
+	//printf("(Stage1) buffer->x: %11.6f, buffer->y: %11.6f, buffer->z: %11.6f\n", buffer->x, buffer->y, buffer->z);
 	
 	// Translate Around X-Axis
-	angle = points_to_angle_2d(rotation_point->y, rotation_point->z, target_point->y, target_point->z);
+	angle = points_to_angle_2d(rotation_point->y, rotation_point->z, target_point->y, buffer->z);
+	//printf("(Stage2) angle1: %f\n", angle * 180 / M_PI);
 	angle -= rotation_delta->x;
-	angle_to_points_2d(angle, sqrtf(	(target_point->y - rotation_point->y) * (target_point->y - rotation_point->y) + \
-												(buffer->z - rotation_point->z) * (buffer->z - rotation_point->z) ), \
+	//printf("(Stage2) angle2: %f\n", angle * 180 / M_PI);
+	angle_to_points_2d(angle, sqrtf(	(delta_y * delta_y) + \
+												((buffer->z - rotation_point->z) * (buffer->z - rotation_point->z)) ), \
 												rotation_point->y, rotation_point->z, &(buffer->y), &(buffer->z));
+	//printf("(Stage2) buffer->x: %11.6f, buffer->y: %11.6f, buffer->z: %11.6f\n", buffer->x, buffer->y, buffer->z);
 	
 	return;
 }
