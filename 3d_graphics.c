@@ -236,61 +236,61 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	box.lines[ 0].p0.x = -1.0;
 	box.lines[ 0].p0.y = +1.0;
 	box.lines[ 0].p0.z = -1.0;
-	box.lines[ 0].p0_color = 0x00FFFFFF;
+	box.lines[ 0].p0_color = 0x00FFFF00;
 	box.lines[ 0].p1.x = +1.0;
 	box.lines[ 0].p1.y = +1.0;
 	box.lines[ 0].p1.z = -1.0;
-	box.lines[ 0].p1_color = 0x0000FFFF;
+	box.lines[ 0].p1_color = 0x00FF00FF;
 	
 	box.lines[ 1].p0.x = +1.0;
 	box.lines[ 1].p0.y = +1.0;
 	box.lines[ 1].p0.z = -1.0;
-	box.lines[ 1].p0_color = 0x0000FFFF;
+	box.lines[ 1].p0_color = 0x00FF00FF;
 	box.lines[ 1].p1.x = +1.0;
 	box.lines[ 1].p1.y = -1.0;
 	box.lines[ 1].p1.z = -1.0;
-	box.lines[ 1].p1_color = 0x00FF00FF;
+	box.lines[ 1].p1_color = 0x00FFFFFF;
 	
 	box.lines[ 2].p0.x = +1.0;
 	box.lines[ 2].p0.y = -1.0;
 	box.lines[ 2].p0.z = -1.0;
-	box.lines[ 2].p0_color = 0x00FF00FF;
+	box.lines[ 2].p0_color = 0x00FFFFFF;
 	box.lines[ 2].p1.x = -1.0;
 	box.lines[ 2].p1.y = -1.0;
 	box.lines[ 2].p1.z = -1.0;
-	box.lines[ 2].p1_color = 0x00FFFF00;
+	box.lines[ 2].p1_color = 0x0000FFFF;
 	
 	box.lines[ 3].p0.x = -1.0;
 	box.lines[ 3].p0.y = -1.0;
 	box.lines[ 3].p0.z = -1.0;
-	box.lines[ 3].p0_color = 0x00FFFF00;
+	box.lines[ 3].p0_color = 0x0000FFFF;
 	box.lines[ 3].p1.x = -1.0;
 	box.lines[ 3].p1.y = +1.0;
 	box.lines[ 3].p1.z = -1.0;
-	box.lines[ 3].p1_color = 0x00FFFFFF;
+	box.lines[ 3].p1_color = 0x00FFFF00;
 	
 	box.lines[ 4].p0.x = -1.0;
 	box.lines[ 4].p0.y = +1.0;
 	box.lines[ 4].p0.z = +1.0;
-	box.lines[ 4].p0_color = 0x00FF0000;
+	box.lines[ 4].p0_color = 0x000000FF;
 	box.lines[ 4].p1.x = +1.0;
 	box.lines[ 4].p1.y = +1.0;
 	box.lines[ 4].p1.z = +1.0;
-	box.lines[ 4].p1_color = 0x0000FF00;
+	box.lines[ 4].p1_color = 0x00FF0000;
 	
 	box.lines[ 5].p0.x = +1.0;
 	box.lines[ 5].p0.y = +1.0;
 	box.lines[ 5].p0.z = +1.0;
-	box.lines[ 5].p0_color = 0x0000FF00;
+	box.lines[ 5].p0_color = 0x00FF0000;
 	box.lines[ 5].p1.x = +1.0;
 	box.lines[ 5].p1.y = -1.0;
 	box.lines[ 5].p1.z = +1.0;
-	box.lines[ 5].p1_color = 0x000000FF;
+	box.lines[ 5].p1_color = 0x0000FF00;
 	
 	box.lines[ 6].p0.x = +1.0;
 	box.lines[ 6].p0.y = -1.0;
 	box.lines[ 6].p0.z = +1.0;
-	box.lines[ 6].p0_color = 0x000000FF;
+	box.lines[ 6].p0_color = 0x0000FF00;
 	box.lines[ 6].p1.x = -1.0;
 	box.lines[ 6].p1.y = -1.0;
 	box.lines[ 6].p1.z = +1.0;
@@ -303,39 +303,39 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	box.lines[ 7].p1.x = -1.0;
 	box.lines[ 7].p1.y = +1.0;
 	box.lines[ 7].p1.z = +1.0;
-	box.lines[ 7].p1_color = 0x00FFFF00;
+	box.lines[ 7].p1_color = 0x000000FF;
 	
 	box.lines[ 8].p0.x = -1.0;
 	box.lines[ 8].p0.y = +1.0;
 	box.lines[ 8].p0.z = -1.0;
-	box.lines[ 8].p0_color = 0x00FFFFFF;
+	box.lines[ 8].p0_color = 0x00FFFF00;
 	box.lines[ 8].p1.x = -1.0;
 	box.lines[ 8].p1.y = +1.0;
 	box.lines[ 8].p1.z = +1.0;
-	box.lines[ 8].p1_color = 0x00FFFF00;
+	box.lines[ 8].p1_color = 0x000000FF;
 	
 	box.lines[ 9].p0.x = +1.0;
 	box.lines[ 9].p0.y = +1.0;
 	box.lines[ 9].p0.z = -1.0;
-	box.lines[ 9].p0_color = 0x0000FFFF;
+	box.lines[ 9].p0_color = 0x00FF00FF;
 	box.lines[ 9].p1.x = +1.0;
 	box.lines[ 9].p1.y = +1.0;
 	box.lines[ 9].p1.z = +1.0;
-	box.lines[ 9].p1_color = 0x0000FF00;
+	box.lines[ 9].p1_color = 0x00FF0000;
 	
 	box.lines[10].p0.x = +1.0;
 	box.lines[10].p0.y = -1.0;
 	box.lines[10].p0.z = -1.0;
-	box.lines[10].p0_color = 0x00FF00FF;
+	box.lines[10].p0_color = 0x00FFFFFF;
 	box.lines[10].p1.x = +1.0;
 	box.lines[10].p1.y = -1.0;
 	box.lines[10].p1.z = +1.0;
-	box.lines[10].p1_color = 0x000000FF;
+	box.lines[10].p1_color = 0x0000FF00;
 	
 	box.lines[11].p0.x = -1.0;
 	box.lines[11].p0.y = -1.0;
 	box.lines[11].p0.z = -1.0;
-	box.lines[11].p0_color = 0x00FFFF00;
+	box.lines[11].p0_color = 0x0000FFFF;
 	box.lines[11].p1.x = -1.0;
 	box.lines[11].p1.y = -1.0;
 	box.lines[11].p1.z = +1.0;
