@@ -303,7 +303,7 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	box.lines[ 7].p1.x = -1.0;
 	box.lines[ 7].p1.y = +1.0;
 	box.lines[ 7].p1.z = +1.0;
-	box.lines[ 7].p1_color = 0x000000FF;
+	box.lines[ 7].p1_color = 0x00FF0000;
 	
 	box.lines[ 8].p0.x = -1.0;
 	box.lines[ 8].p0.y = +1.0;
@@ -312,7 +312,7 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	box.lines[ 8].p1.x = -1.0;
 	box.lines[ 8].p1.y = +1.0;
 	box.lines[ 8].p1.z = +1.0;
-	box.lines[ 8].p1_color = 0x000000FF;
+	box.lines[ 8].p1_color = 0x00FF0000;
 	
 	box.lines[ 9].p0.x = +1.0;
 	box.lines[ 9].p0.y = +1.0;
@@ -341,9 +341,9 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	box.lines[11].p1.z = +1.0;
 	box.lines[11].p1_color = 0x007F7F7F;
 	
-	cam.location.x   =  10.0;
+	cam.location.x   =   0.0;
 	cam.location.y   =   0.0;
-	cam.location.z   =   0.0;
+	cam.location.z   = -10.0;
 	cam.looking_at.x =   0.0;
 	cam.looking_at.y =   0.0;
 	cam.looking_at.z =   0.0;
@@ -410,15 +410,15 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 			pthread_mutex_unlock(&mutex);
 			if (in_fov_p0) {
 				x_p0 = buffer_p0.x / cam.h_fov * vinfo.xres;
-				y_p0 = buffer_p0.y / cam.v_fov * vinfo.yres;
+				y_p0 = (cam.v_fov - buffer_p0.y) / cam.v_fov * vinfo.yres;
 				fbuffer[y_p0 * vinfo.xres + x_p0] = box.lines[i].p0_color;
 			}
 			if (in_fov_p1) {
 				x_p1 = buffer_p1.x / cam.h_fov * vinfo.xres;
-				y_p1 = buffer_p1.y / cam.v_fov * vinfo.yres;
+				y_p1 = (cam.v_fov - buffer_p1.y) / cam.v_fov * vinfo.yres;
 				fbuffer[y_p1 * vinfo.xres + x_p1] = box.lines[i].p1_color;
 			}
-			if (in_fov_p0 && in_fov_p1 && 0) {
+			if (in_fov_p0 && in_fov_p1) {
 				draw_grad_line(x_p0, y_p0, x_p1, y_p1, box.lines[i].p0_color, box.lines[i].p1_color, fbuffer, vinfo.xres, vinfo.yres);
 			}
 			i++;
@@ -465,7 +465,6 @@ void draw_grad_line(unsigned int x1, unsigned int y1, unsigned int x2, unsigned 
 		xd = x2 - x1;
 		ys = y1;
 		yi = 1;
-		//printf("TraceA\n");
 	} else {
 		xs = x2;
 		xd = x1 - x2;
@@ -474,39 +473,25 @@ void draw_grad_line(unsigned int x1, unsigned int y1, unsigned int x2, unsigned 
 		color1 = color1 ^ color2;
 		color2 = color1 ^ color2;
 		color1 = color1 ^ color2;
-		//printf("TraceB\n");
 	}
 	if (y1 <= y2) {
 		yd = y2 - y1;
-		//yi *= 1;
-		//printf("TraceC\n");
 	} else {
 		yd = y1 - y2;
 		yi *= -1;
-		//printf("TraceD\n");
 	}
 	i = 0;
 	if (xd < yd) {
 		while (i < yd) {
 			x = (i * xd) / yd + xs;
 			y = (i * yi) + ys;
-			//printf("A) i: %d, x1: %d, y1: %d, x2: %d, y2: %d, xd: %d, yd: %d, x: %d, y: %d\n", i, x1, y1, x2, y2, xd, yd, x, y);
 			framebuffer[y * fb_width + x] = color_blend(color2, color1, i * 0xFF / yd);
 			i++;
 		}
 	} else if (xd > yd) {
 		while (i < xd) {
 			x = i + xs;
-			/*
-			printf("D) TraceE: %d\n", (i * yi * yd));
-			printf("D) TraceE: %d\n", xd);
-			printf("D) TraceE: %d\n", yd);
-			printf("D) TraceE: %d\n", ys);
-			printf("D) TraceE: %d\n", yi);
-			printf("D) %d\n", ((i * yi * yd) / xd));
-			*/
 			y = ((i * yi * yd) / xd) + ys;
-			//printf("B) i: %d, x1: %d, y1: %d, x2: %d, y2: %d, xd: %d, yd: %d, x: %d, y: %d\n", i, x1, y1, x2, y2, xd, yd, x, y);
 			framebuffer[y * fb_width + x] = color_blend(color2, color1, i * 0xFF / xd);
 			i++;
 		}
@@ -514,7 +499,6 @@ void draw_grad_line(unsigned int x1, unsigned int y1, unsigned int x2, unsigned 
 		while (i < xd) {
 			x = i + xs;
 			y = (i * yi) + ys;
-			//printf("C) i: %d, x1: %d, y1: %d, x2: %d, y2: %d, xd: %d, yd: %d, x: %d, y: %d\n", i, x1, y1, x2, y2, xd, yd, x, y);
 			framebuffer[y * fb_width + x] = color_blend(color2, color1, i * 0xFF / xd);
 			i++;
 		}

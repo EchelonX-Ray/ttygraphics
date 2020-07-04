@@ -38,7 +38,10 @@ Running:
 3) Run from inside the root directory: "./3d_graphics.out"  
   
 TODO:  
---Render lines with gradient (Not just colored points)  
+--Stop camera from drifting due to floating point rounding errors  
+--Fix Line Drawing so it works correctly if one or more points are out of FOV  
 --Figure out how to do and implement VSYNC to avoid screen tearing  
 --Look into more sophisticated and modern kernel video display interfaces  
+----Look into GPU acceleration  
 --Create libc alteratives to support freestanding compilation  
+--Comment and clean-up code  
