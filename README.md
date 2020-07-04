@@ -1,19 +1,21 @@
 # ttygraphics
 Playing with 3D Graphics, Floating-Point Numbers, and drawing straight the the Framebuffer(Or other kernel interfaces)  
   
+--------------------------------------------------------------------------------  
 # WARNING!! (DO NOT SKIP):  
---In some versions of this program, during launch, low-level kernel calls to change  
-  the underlying settings of the kernel TTY are made.  These settings should be reverted upon exit.  
-  The program forks itself to run most processing as a child of itself.  This is done  
-  so that in the event of a crash, the program can attempt to recover the TTY before exiting.  
-  However, I offer no guarentees.  Should the TTY become borked, it may become difficult if not  
-  impossible to recover to interface to the system without a hard reset.  During development, I  
-  had to SSH into my system, write, and run as root a new program, in the terminal, that would make  
-  the necessary calls to the kernel, to recover the TTY when this happened.  The TTY failed in such  
-  a way as to no long even accept Ctrl+Alt+F[x] commands to change TTYs to one that worked.  I am  
-  working on a supplementary program that you can run and will try to do this for you should you  
-  encounter the same problem.  To run it, would will probably have to have an alternative interface  
-  available, like SSH.  However, as of writing this, that program is not yet ready.  
+In some versions of this program, during launch, low-level kernel calls to change  
+the underlying settings of the kernel TTY are made.  These settings should be reverted upon exit.  
+The program forks itself to run most processing as a child of itself.  This is done  
+so that in the event of a crash, the program can attempt to recover the TTY before exiting.  
+However, I offer no guarentees.  Should the TTY become borked, it may become difficult if not  
+impossible to recover to interface to the system without a hard reset.  During development, I  
+had to SSH into my system, write, and run as root a new program, in the terminal, that would make  
+the necessary calls to the kernel, to recover the TTY when this happened.  The TTY failed in such  
+a way as to no long even accept Ctrl+Alt+F[x] commands to change TTYs to one that worked.  I am  
+working on a supplementary program that you can run and will try to do this for you should you  
+encounter the same problem.  To run it, would will probably have to have an alternative interface  
+available, like SSH.  However, as of writing this, that program is not yet ready.  
+--------------------------------------------------------------------------------  
   
 Compatibility:  
 --This has only been tested on x86-64 Linux.  
