@@ -14,19 +14,20 @@ impossible to recover to interface to the system without a hard reset.  During d
 had to SSH into my system, write, and run as root a new program, in the terminal, that would make  
 the necessary calls to the kernel, to recover the TTY when this happened.  The TTY failed in such  
 a way as to no long even accept Ctrl+Alt+F[x] commands to change TTYs to one that worked.  I am  
-working on a supplementary program that you can run and will try to do this for you should you  
-encounter the same problem.  To run it, would will probably have to have an alternative interface  
-available, like SSH.  However, as of writing this, that program is not yet ready.  
-
+including a supplementary program source file that you can build and run to try to do this for you  
+should you encounter the same problem.  To run it, would will probably have to have an alternative interface  
+available, like SSH.  The file is called: "fix_my_tty.c".  GCC should compile it without and addtional  
+options.  
+  
 --------------------------------------------------------------------------------  
   
 Compatibility:  
 --This has only been tested on x86-64 Linux.  
 --This program writes directly to the Linux Kernel Frame Buffer.  
-  It must be run from a raw kernel tty and as a user with the necessary privileges  
+--It must be run from a raw kernel tty and as a user with the necessary privileges to write to the Frame Buffer  
   
 Building:  
-1) Run from inside the root directory: gcc -std=gnu99 -lm -lpthread ./3d_graphics.c -o ./3d_graphics.out  
+1) Run from inside the root directory: "gcc -std=gnu99 -lm -lpthread ./3d_graphics.c -o ./3d_graphics.out"  
   
 Running:  
 1) Switch to a raw kernel TTY.  This can usually be done with Ctrl+Alt+F[1-7].  If you are in a  
