@@ -16,7 +16,7 @@ the necessary calls to the kernel, to recover the TTY when this happened.  The T
 a way as to no long even accept Ctrl+Alt+F[x] commands to change TTYs to one that worked.  I am  
 including a supplementary program source file that you can build and run to try to do this for you  
 should you encounter the same problem.  To run it, would will probably have to have an alternative interface  
-available, like SSH.  The file is called: "fix_my_tty.c".  GCC should compile it without and addtional  
+available, like SSH.  The file is called: "fix_my_tty.c".  GCC should compile it without any addtional  
 options.  
   
 --------------------------------------------------------------------------------  
@@ -41,5 +41,4 @@ TODO:
 --Render lines with gradient (Not just colored points)  
 --Figure out how to do and implement VSYNC to avoid screen tearing  
 --Look into more sophisticated and modern kernel video display interfaces  
---Create TTY recovery program  
 --Create libc alteratives to support freestanding compilation  

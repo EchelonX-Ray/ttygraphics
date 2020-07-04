@@ -22,6 +22,8 @@ struct matrix {
 struct line {
 	struct matrix p0;
 	struct matrix p1;
+	uint32_t p0_color;
+	uint32_t p1_color;
 };
 struct cube {
 	struct line lines[12];
@@ -41,6 +43,8 @@ struct slope {
 
 void hfunc_SIGINT(int sig); // SIGINT Signal Handler.  This is not registered until just before the pthreads are setup.
 void* rotate_camera_func(void* ptr); // pThread Thread Function
+void draw_grad_line(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, uint32_t color1, uint32_t color2, uint32_t* framebuffer, unsigned int fb_width, unsigned int fb_height);
+uint32_t color_blend(uint32_t color1, uint32_t color2, unsigned char ratio);
 unsigned int is_in_fov(struct camera* c, struct matrix* m, struct matrix* buffer);
 void translate_rotation(struct matrix* point, struct matrix* rotation_point, struct matrix* rotation_delta, struct matrix* buffer);
 float points_to_angle_2d(float x1, float y1, float x2, float y2);
@@ -232,102 +236,114 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	box.lines[ 0].p0.x = -1.0;
 	box.lines[ 0].p0.y = +1.0;
 	box.lines[ 0].p0.z = -1.0;
+	box.lines[ 0].p0_color = 0x00FFFFFF;
 	box.lines[ 0].p1.x = +1.0;
 	box.lines[ 0].p1.y = +1.0;
 	box.lines[ 0].p1.z = -1.0;
+	box.lines[ 0].p1_color = 0x0000FFFF;
 	
 	box.lines[ 1].p0.x = +1.0;
 	box.lines[ 1].p0.y = +1.0;
 	box.lines[ 1].p0.z = -1.0;
+	box.lines[ 1].p0_color = 0x0000FFFF;
 	box.lines[ 1].p1.x = +1.0;
 	box.lines[ 1].p1.y = -1.0;
 	box.lines[ 1].p1.z = -1.0;
+	box.lines[ 1].p1_color = 0x00FF00FF;
 	
 	box.lines[ 2].p0.x = +1.0;
 	box.lines[ 2].p0.y = -1.0;
 	box.lines[ 2].p0.z = -1.0;
+	box.lines[ 2].p0_color = 0x00FF00FF;
 	box.lines[ 2].p1.x = -1.0;
 	box.lines[ 2].p1.y = -1.0;
 	box.lines[ 2].p1.z = -1.0;
+	box.lines[ 2].p1_color = 0x00FFFF00;
 	
 	box.lines[ 3].p0.x = -1.0;
 	box.lines[ 3].p0.y = -1.0;
 	box.lines[ 3].p0.z = -1.0;
+	box.lines[ 3].p0_color = 0x00FFFF00;
 	box.lines[ 3].p1.x = -1.0;
 	box.lines[ 3].p1.y = +1.0;
 	box.lines[ 3].p1.z = -1.0;
+	box.lines[ 3].p1_color = 0x00FFFFFF;
 	
 	box.lines[ 4].p0.x = -1.0;
 	box.lines[ 4].p0.y = +1.0;
 	box.lines[ 4].p0.z = +1.0;
+	box.lines[ 4].p0_color = 0x00FF0000;
 	box.lines[ 4].p1.x = +1.0;
 	box.lines[ 4].p1.y = +1.0;
 	box.lines[ 4].p1.z = +1.0;
+	box.lines[ 4].p1_color = 0x0000FF00;
 	
 	box.lines[ 5].p0.x = +1.0;
 	box.lines[ 5].p0.y = +1.0;
 	box.lines[ 5].p0.z = +1.0;
+	box.lines[ 5].p0_color = 0x0000FF00;
 	box.lines[ 5].p1.x = +1.0;
 	box.lines[ 5].p1.y = -1.0;
 	box.lines[ 5].p1.z = +1.0;
+	box.lines[ 5].p1_color = 0x000000FF;
 	
 	box.lines[ 6].p0.x = +1.0;
 	box.lines[ 6].p0.y = -1.0;
 	box.lines[ 6].p0.z = +1.0;
+	box.lines[ 6].p0_color = 0x000000FF;
 	box.lines[ 6].p1.x = -1.0;
 	box.lines[ 6].p1.y = -1.0;
 	box.lines[ 6].p1.z = +1.0;
+	box.lines[ 6].p1_color = 0x007F7F7F;
 	
 	box.lines[ 7].p0.x = -1.0;
 	box.lines[ 7].p0.y = -1.0;
 	box.lines[ 7].p0.z = +1.0;
+	box.lines[ 7].p0_color = 0x007F7F7F;
 	box.lines[ 7].p1.x = -1.0;
 	box.lines[ 7].p1.y = +1.0;
 	box.lines[ 7].p1.z = +1.0;
+	box.lines[ 7].p1_color = 0x00FFFF00;
 	
-	/*
 	box.lines[ 8].p0.x = -1.0;
 	box.lines[ 8].p0.y = +1.0;
 	box.lines[ 8].p0.z = -1.0;
+	box.lines[ 8].p0_color = 0x00FFFFFF;
 	box.lines[ 8].p1.x = -1.0;
 	box.lines[ 8].p1.y = +1.0;
 	box.lines[ 8].p1.z = +1.0;
+	box.lines[ 8].p1_color = 0x00FFFF00;
 	
 	box.lines[ 9].p0.x = +1.0;
 	box.lines[ 9].p0.y = +1.0;
 	box.lines[ 9].p0.z = -1.0;
+	box.lines[ 9].p0_color = 0x0000FFFF;
 	box.lines[ 9].p1.x = +1.0;
 	box.lines[ 9].p1.y = +1.0;
 	box.lines[ 9].p1.z = +1.0;
+	box.lines[ 9].p1_color = 0x0000FF00;
 	
 	box.lines[10].p0.x = +1.0;
 	box.lines[10].p0.y = -1.0;
 	box.lines[10].p0.z = -1.0;
+	box.lines[10].p0_color = 0x00FF00FF;
 	box.lines[10].p1.x = +1.0;
 	box.lines[10].p1.y = -1.0;
 	box.lines[10].p1.z = +1.0;
+	box.lines[10].p1_color = 0x000000FF;
 	
 	box.lines[11].p0.x = -1.0;
 	box.lines[11].p0.y = -1.0;
 	box.lines[11].p0.z = -1.0;
+	box.lines[11].p0_color = 0x00FFFF00;
 	box.lines[11].p1.x = -1.0;
 	box.lines[11].p1.y = -1.0;
 	box.lines[11].p1.z = +1.0;
-	*/
+	box.lines[11].p1_color = 0x007F7F7F;
 	
-	uint32_t pt_colors[8];
-	pt_colors[ 0] = 0x00FFFFFF;
-	pt_colors[ 1] = 0x0000FFFF;
-	pt_colors[ 2] = 0x00FF00FF;
-	pt_colors[ 3] = 0x00FFFF00;
-	pt_colors[ 4] = 0x000000FF;
-	pt_colors[ 5] = 0x0000FF00;
-	pt_colors[ 6] = 0x00FF0000;
-	pt_colors[ 7] = 0x007F7F7F;
-	
-	cam.location.x =  10.0;
-	cam.location.y =   0.0;
-	cam.location.z =   0.0;
+	cam.location.x   =  10.0;
+	cam.location.y   =   0.0;
+	cam.location.z   =   0.0;
 	cam.looking_at.x =   0.0;
 	cam.looking_at.y =   0.0;
 	cam.looking_at.z =   0.0;
@@ -363,36 +379,60 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 		return 10;
 	}
 	
-	unsigned int old_points[8];
-	old_points[0] = 0;
-	old_points[1] = 0;
-	old_points[2] = 0;
-	old_points[3] = 0;
-	old_points[4] = 0;
-	old_points[5] = 0;
-	old_points[6] = 0;
-	old_points[7] = 0;
-	struct matrix buffer;
-	uint32_t color;
+	uint32_t* fbuffer = 0;
+	unsigned int fbuffer_len = vinfo.xres * vinfo.yres;
+	fbuffer = malloc(fbuffer_len * sizeof(uint32_t));
+	if (fbuffer == 0) {
+		printf("Error: malloc() of fbuffer failed\n");
+		exit(12);
+	}
+	
+	struct matrix buffer_p0;
+	struct matrix buffer_p1;
 	unsigned int i;
-	unsigned int x;
-	unsigned int y;
-	unsigned int in_fov;
+	unsigned int x_p0;
+	unsigned int y_p0;
+	unsigned int x_p1;
+	unsigned int y_p1;
+	unsigned int in_fov_p0;
+	unsigned int in_fov_p1;
+	i = 0;
+	while (i < fbuffer_len) {
+		fbuffer[i] = 0xFF000000;
+		i++;
+	}
 	while (running) {
 		i = 0;
-		while (i < 8) {
+		while (i < 12) {
 			pthread_mutex_lock(&mutex);
-			in_fov = is_in_fov(&cam, &(box.lines[i].p0), &buffer);
+			in_fov_p0 = is_in_fov(&cam, &(box.lines[i].p0), &buffer_p0);
+			in_fov_p1 = is_in_fov(&cam, &(box.lines[i].p1), &buffer_p1);
 			pthread_mutex_unlock(&mutex);
-			if (in_fov) {
-				color = pt_colors[i];
-				x = buffer.x / cam.h_fov * vinfo.xres;
-				y = buffer.y / cam.v_fov * vinfo.yres;
-				mcolor[old_points[i]] = 0x00000000;
-				old_points[i] = y * vinfo.xres + x;
-				mcolor[old_points[i]] = color;
+			if (in_fov_p0) {
+				x_p0 = buffer_p0.x / cam.h_fov * vinfo.xres;
+				y_p0 = buffer_p0.y / cam.v_fov * vinfo.yres;
+				fbuffer[y_p0 * vinfo.xres + x_p0] = box.lines[i].p0_color;
+			}
+			if (in_fov_p1) {
+				x_p1 = buffer_p1.x / cam.h_fov * vinfo.xres;
+				y_p1 = buffer_p1.y / cam.v_fov * vinfo.yres;
+				fbuffer[y_p1 * vinfo.xres + x_p1] = box.lines[i].p1_color;
+			}
+			if (in_fov_p0 && in_fov_p1 && 0) {
+				draw_grad_line(x_p0, y_p0, x_p1, y_p1, box.lines[i].p0_color, box.lines[i].p1_color, fbuffer, vinfo.xres, vinfo.yres);
+			}
+			i++;
+		}
+		i = 0;
+		while (i < fbuffer_len) {
+			if (fbuffer[i] != 0x00000000) {
+				if (fbuffer[i] != 0xFF000000) {
+					mcolor[i] = fbuffer[i];
+					fbuffer[i] = 0x00000000;
+				}
 			} else {
-				printf("Failure: Out of camera FOV.\n");
+				mcolor[i] = 0x00000000;
+				fbuffer[i] = 0xFF000000;
 			}
 			i++;
 		}
@@ -404,11 +444,100 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	pthread_join(rotate_camera_thread, 0);
 	pthread_mutex_destroy(&mutex);
 	
+	free(fbuffer);
 	munmap(ptr, vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8);
 	
 	close(fd);
 	
 	return 0;
+}
+void draw_grad_line(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, uint32_t color1, uint32_t color2, uint32_t* framebuffer, unsigned int fb_width, unsigned int fb_height) {
+	signed int xd;
+	signed int yd;
+	signed int xs;
+	signed int ys;
+	signed int yi;
+	signed int x;
+	signed int y;
+	signed int i;
+	if (x1 <= x2) {
+		xs = x1;
+		xd = x2 - x1;
+		ys = y1;
+		yi = 1;
+		//printf("TraceA\n");
+	} else {
+		xs = x2;
+		xd = x1 - x2;
+		ys = y2;
+		yi = -1;
+		color1 = color1 ^ color2;
+		color2 = color1 ^ color2;
+		color1 = color1 ^ color2;
+		//printf("TraceB\n");
+	}
+	if (y1 <= y2) {
+		yd = y2 - y1;
+		//yi *= 1;
+		//printf("TraceC\n");
+	} else {
+		yd = y1 - y2;
+		yi *= -1;
+		//printf("TraceD\n");
+	}
+	i = 0;
+	if (xd < yd) {
+		while (i < yd) {
+			x = (i * xd) / yd + xs;
+			y = (i * yi) + ys;
+			//printf("A) i: %d, x1: %d, y1: %d, x2: %d, y2: %d, xd: %d, yd: %d, x: %d, y: %d\n", i, x1, y1, x2, y2, xd, yd, x, y);
+			framebuffer[y * fb_width + x] = color_blend(color2, color1, i * 0xFF / yd);
+			i++;
+		}
+	} else if (xd > yd) {
+		while (i < xd) {
+			x = i + xs;
+			/*
+			printf("D) TraceE: %d\n", (i * yi * yd));
+			printf("D) TraceE: %d\n", xd);
+			printf("D) TraceE: %d\n", yd);
+			printf("D) TraceE: %d\n", ys);
+			printf("D) TraceE: %d\n", yi);
+			printf("D) %d\n", ((i * yi * yd) / xd));
+			*/
+			y = ((i * yi * yd) / xd) + ys;
+			//printf("B) i: %d, x1: %d, y1: %d, x2: %d, y2: %d, xd: %d, yd: %d, x: %d, y: %d\n", i, x1, y1, x2, y2, xd, yd, x, y);
+			framebuffer[y * fb_width + x] = color_blend(color2, color1, i * 0xFF / xd);
+			i++;
+		}
+	} else {
+		while (i < xd) {
+			x = i + xs;
+			y = (i * yi) + ys;
+			//printf("C) i: %d, x1: %d, y1: %d, x2: %d, y2: %d, xd: %d, yd: %d, x: %d, y: %d\n", i, x1, y1, x2, y2, xd, yd, x, y);
+			framebuffer[y * fb_width + x] = color_blend(color2, color1, i * 0xFF / xd);
+			i++;
+		}
+	}
+	return;
+}
+uint32_t color_blend(uint32_t color1, uint32_t color2, unsigned char ratio) {
+	uint32_t result = 0;
+	uint32_t tmpvar;
+	uint32_t mask;
+	mask = 0x000000FF;
+	tmpvar = (((color1 & mask) * ratio) + ((color2 & mask) * (0xFF - ratio))) / 0xFF;
+	result |= tmpvar & mask;
+	mask = 0x0000FF00;
+	tmpvar = (((color1 & mask) * ratio) + ((color2 & mask) * (0xFF - ratio))) / 0xFF;
+	result |= tmpvar & mask;
+	mask = 0x00FF0000;
+	tmpvar = (((color1 & mask) * ratio) + ((color2 & mask) * (0xFF - ratio))) / 0xFF;
+	result |= tmpvar & mask;
+	mask = 0xFF000000;
+	tmpvar = (((color1 & mask) * ratio) + ((color2 & mask) * (0xFF - ratio))) / 0xFF;
+	result |= tmpvar & mask;
+	return result;
 }
 unsigned int is_in_fov(struct camera* c, struct matrix* m, struct matrix *buffer) {
 	// Translate point(struct matrix* m) to the camera angles
