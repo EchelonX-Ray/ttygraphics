@@ -2,7 +2,9 @@
 Playing with 3D Graphics, Floating-Point Numbers, and drawing straight the the Framebuffer(Or other kernel interfaces)  
   
 --------------------------------------------------------------------------------  
+
 # WARNING!! (DO NOT SKIP):  
+
 In some versions of this program, during launch, low-level kernel calls to change  
 the underlying settings of the kernel TTY are made.  These settings should be reverted upon exit.  
 The program forks itself to run most processing as a child of itself.  This is done  
@@ -15,6 +17,7 @@ a way as to no long even accept Ctrl+Alt+F[x] commands to change TTYs to one tha
 working on a supplementary program that you can run and will try to do this for you should you  
 encounter the same problem.  To run it, would will probably have to have an alternative interface  
 available, like SSH.  However, as of writing this, that program is not yet ready.  
+
 --------------------------------------------------------------------------------  
   
 Compatibility:  
