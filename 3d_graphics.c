@@ -486,36 +486,19 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 			}
 			y_i++;
 		}
-		if (vinfo.yoffset == 0) {
-			vinfo.yoffset = screensize / 4;
-			ptr2 = ptr;
-			//fbuffer = fptr + vinfo.xres * vinfo.yres * sizeof(uint32_t);
-			fbuffer = fptr;
-		} else {
+		if (ptr2 == ptr) {
 			vinfo.yoffset = 0;
 			ptr2 = ptr + screensize;
-			//fbuffer = fptr;
 			fbuffer = fptr + vinfo.xres * vinfo.yres;
+		} else {
+			vinfo.yoffset = vinfo.yres + vinfo.yoffset;
+			ptr2 = ptr;
+			fbuffer = fptr;
 		}
-		printf("IOCTL vinfo.xoffset: %d\n", vinfo.xoffset);
-		printf("IOCTL vinfo.yoffset: %d\n", vinfo.yoffset);
-		printf("IOCTL vinfo.vmode: %d\n", vinfo.vmode);
-		if (ioctl(fd, FBIOPAN_DISPLAY, &vinfo) == -1 && 0) {
+		if (ioctl(fd, FBIOPAN_DISPLAY, &vinfo) == -1) {
 			printf("Error: Display Pan Failed.\n");
 			printf("errno: %s\n", strerror(errno));
 			exit(15);
-		}
-		/*
-		if (ioctl(fd, FBIOPUT_VSCREENINFO, &vinfo) != 0) {
-			printf("Error: Display Pan Failed.\n");
-			printf("errno: %s\n", strerror(errno));
-			return 15;
-		}
-		*/
-		if (ioctl(fd, FBIO_WAITFORVSYNC, 0) == -1) {
-			printf("Error: WAITFORVSYNC Failed.\n");
-			printf("errno: %s\n", strerror(errno));
-			exit(16);
 		}
 		cam.frame_counter++;
 	}
@@ -531,6 +514,42 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 			x_i++;
 		}
 		y_i++;
+	}
+	if (ptr2 == ptr) {
+		vinfo.yoffset = 0;
+		ptr2 = ptr + screensize;
+		fbuffer = fptr + vinfo.xres * vinfo.yres;
+	} else {
+		vinfo.yoffset = vinfo.yres + vinfo.yoffset;
+		ptr2 = ptr;
+		fbuffer = fptr;
+	}
+	if (ioctl(fd, FBIOPAN_DISPLAY, &vinfo) == -1) {
+		printf("Error: Display Pan Failed. - At Exit1\n");
+		printf("errno: %s\n", strerror(errno));
+		exit(17);
+	}
+	y_i = 0;
+	while (y_i < vinfo.yres) {
+		x_i = 0;
+		while (x_i < vinfo.xres) {
+			if (fbuffer[y_i * vinfo.xres + x_i] == 0x00000000) {
+				fbuffer[y_i * vinfo.xres + x_i] = 0xFF000000;
+				*((uint32_t*)(ptr2 + x_i * (vinfo.bits_per_pixel / 8) + y_i * finfo.line_length)) = 0x00000000;
+			}
+			x_i++;
+		}
+		y_i++;
+	}
+	if (ptr2 == ptr) {
+		vinfo.yoffset = 0;
+		ptr2 = ptr + screensize;
+		fbuffer = fptr + vinfo.xres * vinfo.yres;
+		if (ioctl(fd, FBIOPAN_DISPLAY, &vinfo) == -1) {
+			printf("Error: Display Pan Failed. - At Exit2\n");
+			printf("errno: %s\n", strerror(errno));
+			exit(17);
+		}
 	}
 	
 	// Close and destroy threads
