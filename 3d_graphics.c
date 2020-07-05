@@ -196,6 +196,7 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	struct fb_var_screeninfo vinfo;
 	struct fb_fix_screeninfo finfo;
 	
+	
 	fd = open("/dev/fb0", O_RDWR);
 	if (fd < 0) {
 		printf("Error: Invaild fd.  Possible open() failure!  Stage-3\n");
@@ -203,32 +204,60 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	}
 	
 	if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) != 0) {
-		printf("Error: Error reading fixed information\n");
+		printf("Error: Error reading fixed information.\n");
 		return 5;
 	}
 	if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) != 0) {
-		printf("Error: Error reading variable information\n");
+		printf("Error: Error reading variable information.  Stage-1\n");
 		return 5;
 	}
-	
-	printf("Vinfo: Res - %dx%d, BPP - %d\n", vinfo.xres, vinfo.yres, vinfo.bits_per_pixel);
+	if(vinfo.grayscale != 0 || vinfo.bits_per_pixel != 32 || vinfo.xoffset != 0 || vinfo.yoffset != 0){
+		vinfo.grayscale = 0;
+		vinfo.bits_per_pixel = 32;
+		vinfo.xoffset = 0;
+		vinfo.yoffset = 0;
+		if (ioctl(fd, FBIOPUT_VSCREENINFO, &vinfo) != 0) {
+			printf("Error: Error setting variable information.\n");
+			return 13;
+		}
+		if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) != 0) {
+			printf("Error: Error reading variable information.  Stage-2\n");
+			return 5;
+		}
+		if (vinfo.grayscale != 0 || vinfo.bits_per_pixel != 32 || vinfo.xoffset != 0 || vinfo.yoffset != 0) {
+			printf("Error: Could not set color mode: vinfo.grayscale != 0 && vinfo.bits_per_pixel != 32\n");
+			return 14;
+		}
+	}
 	
 	if (vinfo.bits_per_pixel != 32) {
 		printf("Error: Wrong bits per pixel!\n");
 		return 6;
 	}
 	
-	uint32_t* mcolor;
+	printf("Vinfo: Res - %dx%d, BPP - %d\n", vinfo.xres, vinfo.yres, vinfo.bits_per_pixel);
+	printf("finfo.line_length: %d\n", finfo.line_length);
+	printf("vinfo.xres: %d\n", vinfo.xres);
+	printf("vinfo.yres: %d\n", vinfo.yres);
+	printf("vinfo.xres_virtual: %d\n", vinfo.xres_virtual);
+	printf("vinfo.yres_virtual: %d\n", vinfo.yres_virtual);
+	printf("finfo.xpanstep: %d\n", finfo.xpanstep);
+	printf("finfo.ypanstep: %d\n", finfo.ypanstep);
+	printf("vinfo.vmode: %d\n", vinfo.vmode);
+	
 	void* ptr = 0;
+	void* ptr2;
 	
 	errno = 0;
-	ptr = mmap(ptr, vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	//exit(50);
+	unsigned int screensize = vinfo.yres * finfo.line_length;
+	ptr = mmap(ptr, screensize * 2, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (ptr == MAP_FAILED || ptr == 0 || errno != 0) {
 		printf("Error: mmap() Failed!  Could not create virtual address space mapping!\n");
 		printf("errno: %s\n", strerror(errno));
 		return 7;
 	}
-	mcolor = ptr;
+	ptr2 = ptr + screensize;
 	
 	struct cube box;
 	struct camera cam;
@@ -379,83 +408,138 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 		return 10;
 	}
 	
+	uint32_t* fptr = 0;
 	uint32_t* fbuffer = 0;
-	unsigned int fbuffer_len = vinfo.xres * vinfo.yres;
-	fbuffer = malloc(fbuffer_len * sizeof(uint32_t));
-	if (fbuffer == 0) {
-		printf("Error: malloc() of fbuffer failed\n");
+	//unsigned int fbuffer_len = vinfo.xres * vinfo.yres;
+	fptr = malloc(vinfo.xres * vinfo.yres * sizeof(uint32_t) * 2);
+	if (fptr == 0) {
+		printf("Error: malloc() of fptr failed\n");
 		exit(12);
 	}
+	fbuffer = fptr + vinfo.xres * vinfo.yres;
 	
 	struct matrix buffer_p0;
 	struct matrix buffer_p1;
-	unsigned int i;
+	//unsigned int i;
 	unsigned int x_p0;
 	unsigned int y_p0;
 	unsigned int x_p1;
 	unsigned int y_p1;
+	unsigned int x_i;
+	unsigned int y_i;
 	unsigned int in_fov_p0;
 	unsigned int in_fov_p1;
-	i = 0;
-	while (i < fbuffer_len) {
-		fbuffer[i] = 0xFF000000;
-		i++;
+	y_i = 0;
+	while (y_i < vinfo.yres) {
+		x_i = 0;
+		while (x_i < vinfo.xres) {
+			fptr[y_i * vinfo.xres + x_i] = 0xFF000000;
+			x_i++;
+		}
+		y_i++;
+	}
+	y_i = 0;
+	while (y_i < vinfo.yres) {
+		x_i = 0;
+		while (x_i < vinfo.xres) {
+			fptr[y_i * vinfo.xres + x_i + vinfo.xres * vinfo.yres] = 0xFF000000;
+			x_i++;
+		}
+		y_i++;
 	}
 	while (running) {
-		i = 0;
-		while (i < 12) {
+		x_i = 0;
+		while (x_i < 12) {
 			pthread_mutex_lock(&mutex);
-			in_fov_p0 = is_in_fov(&cam, &(box.lines[i].p0), &buffer_p0);
-			in_fov_p1 = is_in_fov(&cam, &(box.lines[i].p1), &buffer_p1);
+			in_fov_p0 = is_in_fov(&cam, &(box.lines[x_i].p0), &buffer_p0);
+			in_fov_p1 = is_in_fov(&cam, &(box.lines[x_i].p1), &buffer_p1);
 			pthread_mutex_unlock(&mutex);
 			if (in_fov_p0) {
 				x_p0 = buffer_p0.x / cam.h_fov * vinfo.xres;
 				y_p0 = (cam.v_fov - buffer_p0.y) / cam.v_fov * vinfo.yres;
-				fbuffer[y_p0 * vinfo.xres + x_p0] = box.lines[i].p0_color;
+				fbuffer[y_p0 * vinfo.xres + x_p0] = box.lines[x_i].p0_color;
 			}
 			if (in_fov_p1) {
 				x_p1 = buffer_p1.x / cam.h_fov * vinfo.xres;
 				y_p1 = (cam.v_fov - buffer_p1.y) / cam.v_fov * vinfo.yres;
-				fbuffer[y_p1 * vinfo.xres + x_p1] = box.lines[i].p1_color;
+				fbuffer[y_p1 * vinfo.xres + x_p1] = box.lines[x_i].p1_color;
 			}
 			if (in_fov_p0 && in_fov_p1) {
-				draw_grad_line(x_p0, y_p0, x_p1, y_p1, box.lines[i].p0_color, box.lines[i].p1_color, fbuffer, vinfo.xres, vinfo.yres);
+				draw_grad_line(x_p0, y_p0, x_p1, y_p1, box.lines[x_i].p0_color, box.lines[x_i].p1_color, fbuffer, vinfo.xres, vinfo.yres);
 			}
-			i++;
+			x_i++;
 		}
-		i = 0;
-		while (i < fbuffer_len) {
-			if (fbuffer[i] != 0x00000000) {
-				if (fbuffer[i] != 0xFF000000) {
-					mcolor[i] = fbuffer[i];
-					fbuffer[i] = 0x00000000;
+		y_i = 0;
+		while (y_i < vinfo.yres) {
+			x_i = 0;
+			while (x_i < vinfo.xres) {
+				if (fbuffer[y_i * vinfo.xres + x_i] == 0x00000000) {
+					*((uint32_t*)(ptr2 + x_i * (vinfo.bits_per_pixel / 8) + y_i * finfo.line_length)) = 0x00000000;
+					fbuffer[y_i * vinfo.xres + x_i] = 0x7F000000;
+				} else {
+					if (fbuffer[y_i * vinfo.xres + x_i] != 0xFF000000) {
+						*((uint32_t*)(ptr2 + x_i * (vinfo.bits_per_pixel / 8) + y_i * finfo.line_length)) = fbuffer[y_i * vinfo.xres + x_i];
+						fbuffer[y_i * vinfo.xres + x_i] = 0x00000000;
+					}
 				}
-			} else {
-				mcolor[i] = 0x00000000;
-				fbuffer[i] = 0xFF000000;
+				x_i++;
 			}
-			i++;
+			y_i++;
+		}
+		if (vinfo.yoffset == 0) {
+			vinfo.yoffset = screensize / 4;
+			ptr2 = ptr;
+			//fbuffer = fptr + vinfo.xres * vinfo.yres * sizeof(uint32_t);
+			fbuffer = fptr;
+		} else {
+			vinfo.yoffset = 0;
+			ptr2 = ptr + screensize;
+			//fbuffer = fptr;
+			fbuffer = fptr + vinfo.xres * vinfo.yres;
+		}
+		printf("IOCTL vinfo.xoffset: %d\n", vinfo.xoffset);
+		printf("IOCTL vinfo.yoffset: %d\n", vinfo.yoffset);
+		printf("IOCTL vinfo.vmode: %d\n", vinfo.vmode);
+		if (ioctl(fd, FBIOPAN_DISPLAY, &vinfo) == -1 && 0) {
+			printf("Error: Display Pan Failed.\n");
+			printf("errno: %s\n", strerror(errno));
+			exit(15);
+		}
+		/*
+		if (ioctl(fd, FBIOPUT_VSCREENINFO, &vinfo) != 0) {
+			printf("Error: Display Pan Failed.\n");
+			printf("errno: %s\n", strerror(errno));
+			return 15;
+		}
+		*/
+		if (ioctl(fd, FBIO_WAITFORVSYNC, 0) == -1) {
+			printf("Error: WAITFORVSYNC Failed.\n");
+			printf("errno: %s\n", strerror(errno));
+			exit(16);
 		}
 		cam.frame_counter++;
 	}
 	printf("Exiting\n");
-	/*
-	i = 0;
-	while (i < fbuffer_len) {
-		if (fbuffer[i] == 0x00000000) {
-			mcolor[i] = 0x00000000;
+	y_i = 0;
+	while (y_i < vinfo.yres) {
+		x_i = 0;
+		while (x_i < vinfo.xres) {
+			if (fbuffer[y_i * vinfo.xres + x_i] == 0x00000000) {
+				fbuffer[y_i * vinfo.xres + x_i] = 0xFF000000;
+				*((uint32_t*)(ptr2 + x_i * (vinfo.bits_per_pixel / 8) + y_i * finfo.line_length)) = 0x00000000;
+			}
+			x_i++;
 		}
-		i++;
+		y_i++;
 	}
-	*/
 	
 	// Close and destroy threads
 	running = 0;
 	pthread_join(rotate_camera_thread, 0);
 	pthread_mutex_destroy(&mutex);
 	
-	free(fbuffer);
-	munmap(ptr, vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8);
+	free(fptr);
+	munmap(ptr, screensize * 2);
 	
 	close(fd);
 	
