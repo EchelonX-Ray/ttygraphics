@@ -211,13 +211,13 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 		printf("Error: Error reading variable information.  Stage-1\n");
 		return 5;
 	}
-	if(vinfo.grayscale != 0 || vinfo.bits_per_pixel != 32 || vinfo.xoffset != 0 || vinfo.yoffset != 0){
+	if (vinfo.grayscale != 0 || vinfo.bits_per_pixel != 32 || vinfo.xoffset != 0 || vinfo.yoffset != 0) {
 		vinfo.grayscale = 0;
 		vinfo.bits_per_pixel = 32;
 		vinfo.xoffset = 0;
 		vinfo.yoffset = 0;
 		if (ioctl(fd, FBIOPUT_VSCREENINFO, &vinfo) != 0) {
-			printf("Error: Error setting variable information.\n");
+			printf("Error: Error setting variable information.  Stage-1\n");
 			return 13;
 		}
 		if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) != 0) {
@@ -225,8 +225,28 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 			return 5;
 		}
 		if (vinfo.grayscale != 0 || vinfo.bits_per_pixel != 32 || vinfo.xoffset != 0 || vinfo.yoffset != 0) {
-			printf("Error: Could not set color mode: vinfo.grayscale != 0 && vinfo.bits_per_pixel != 32\n");
+			printf("Error: Could not set modes.  Upon rechecking we found: \n");
+			printf("\tvinfo.grayscale != 0\n");
+			printf("\tvinfo.bits_per_pixel != 32\n");
+			printf("\tvinfo.xoffset != 0\n");
+			printf("\tvinfo.yoffset != 0\n");
 			return 14;
+		}
+	}
+	if (vinfo.yres * 2 > vinfo.yres_virtual) {
+		vinfo.yres_virtual = vinfo.yres * 2;
+		if (ioctl(fd, FBIOPUT_VSCREENINFO, &vinfo) != 0) {
+			printf("Error: Error setting variable information.  Stage-2\n");
+			return 13;
+		}
+		if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) != 0) {
+			printf("Error: Error reading variable information.  Stage-3\n");
+			return 5;
+		}
+		if (vinfo.yres * 2 > vinfo.yres_virtual) {
+			printf("Error: Could not set modes.  Upon rechecking we found: \n");
+			printf("\tvinfo.yres_virtual < vinfo.yres * 2\n");
+			return 16;
 		}
 	}
 	
