@@ -15,7 +15,7 @@ had to SSH into my system, write, and run as root a new program, in the terminal
 the necessary calls to the kernel, to recover the TTY when this happened.  The TTY failed in such  
 a way as to no long even accept Ctrl+Alt+F[x] commands to change TTYs to one that worked.  I am  
 including a supplementary program source file that you can build and run to try to do this for you  
-should you encounter the same problem.  To run it, would will probably have to have an alternative interface  
+should you encounter the same problem.  To run it, you will probably have to have an alternative interface  
 available, like SSH.  The file is called: "fix_my_tty.c".  GCC should compile it without any addtional  
 options.  
   
@@ -40,7 +40,6 @@ Running:
 TODO:  
 --Stop camera from drifting due to floating point rounding errors  
 --Fix Line Drawing so it works correctly if one or more points are out of FOV  
---Figure out how to do and implement VSYNC to avoid screen tearing  
 --Look into more sophisticated and modern kernel video display interfaces  
 ----Look into GPU acceleration  
 --Create libc alteratives to support freestanding compilation  

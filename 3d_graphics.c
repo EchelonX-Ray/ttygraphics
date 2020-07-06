@@ -410,7 +410,6 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	
 	uint32_t* fptr = 0;
 	uint32_t* fbuffer = 0;
-	//unsigned int fbuffer_len = vinfo.xres * vinfo.yres;
 	fptr = malloc(vinfo.xres * vinfo.yres * sizeof(uint32_t) * 2);
 	if (fptr == 0) {
 		printf("Error: malloc() of fptr failed\n");
@@ -420,7 +419,6 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	
 	struct matrix buffer_p0;
 	struct matrix buffer_p1;
-	//unsigned int i;
 	unsigned int x_p0;
 	unsigned int y_p0;
 	unsigned int x_p1;
@@ -557,6 +555,7 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	pthread_join(rotate_camera_thread, 0);
 	pthread_mutex_destroy(&mutex);
 	
+	// Free up allocated memory
 	free(fptr);
 	munmap(ptr, screensize * 2);
 	
