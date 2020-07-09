@@ -2,7 +2,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
-//#include <linux/kd.h>
+#include <linux/kd.h>
 #include <linux/fb.h>
 #include <unistd.h>
 #include <signal.h>
@@ -13,6 +13,8 @@
 #include <stdint.h>
 #include <math.h>
 #include <pthread.h>
+
+#include "fb_setup.c"
 
 struct matrix {
 	float x;
@@ -43,7 +45,7 @@ struct slope {
 
 void hfunc_SIGINT(int sig); // SIGINT Signal Handler.  This is not registered until just before the pthreads are setup.
 void* rotate_camera_func(void* ptr); // pThread Thread Function
-void draw_grad_line(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, uint32_t color1, uint32_t color2, uint32_t* framebuffer, unsigned int fb_width, unsigned int fb_height);
+void draw_grad_line(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, uint32_t color1, uint32_t color2, uint32_t* framebuffer, unsigned int fb_width);
 uint32_t color_blend(uint32_t color1, uint32_t color2, unsigned char ratio);
 unsigned int is_in_fov(struct camera* c, struct matrix* m, struct matrix* buffer);
 void translate_rotation(struct matrix* point, struct matrix* rotation_point, struct matrix* rotation_delta, struct matrix* buffer);
@@ -79,7 +81,7 @@ void* rotate_camera_func(void* ptr) {
 			sec = 0;
 			fps = cam->frame_counter;
 			cam->frame_counter = 0;
-			printf("FPS: %d\n", fps);
+			fprintf(stdout, "FPS: %d\n", fps);
 		}
 		float angle;
 		float cam_x;
@@ -131,7 +133,8 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 		return 4;
 	}
 	
-	//ret_val = ioctl(fd, KDSETMODE, 1);
+	ret_val = 0;
+	ret_val = ioctl(fd, KDSETMODE, 1);
 	if (ret_val != 0) {
 		printf("Error: Failure Setting TTY Mode: To Graphical!\n");
 		printf("errno: %s\n", strerror(errno));
@@ -171,13 +174,17 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 			printf("Error: Invaild fd.  Possible open() failure!  Stage-2\n");
 			return 4;
 		}
-		//ret_val = ioctl(fd, KDSETMODE, 0);
+		ret_val = 0;
+		ret_val = ioctl(fd, KDSETMODE, 0);
 		if (ret_val != 0) {
 			printf("Error: Failure Setting TTY Mode: To Text!\n");
 			printf("errno: %s\n", strerror(errno));
 			return 3;
 		}
 		//close(fd);
+		
+		fprintf(stderr, "\x1b\x5b\x48\x1b\x5b\x4a\x1b\x5b\x33\x4a");
+		fprintf(stdout, "\x1b\x5b\x48\x1b\x5b\x4a\x1b\x5b\x33\x4a");
 		
 		return 0;
 	} else if (fpid == 0) {
@@ -189,95 +196,67 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	} else {
 		// Fork Failed
 		printf("Error: Fork Failed\n");
+		
+		//fd = open("/dev/tty6", O_RDWR);
+		if (fd < 0) {
+			printf("Error: Invaild fd.  Possible open() failure!  Stage-2\n");
+			return 4;
+		}
+		ret_val = 0;
+		ret_val = ioctl(fd, KDSETMODE, 0);
+		if (ret_val != 0) {
+			printf("Error: Failure Setting TTY Mode: To Text!\n");
+			printf("errno: %s\n", strerror(errno));
+			return 3;
+		}
+		//close(fd);
+		
 		return 2;
 	}
 	
 	// Child Begin:
-	struct fb_var_screeninfo vinfo;
-	struct fb_fix_screeninfo finfo;
+	char* drm_card_str = "/dev/dri/card1";
+	char* fb_str = "/dev/fb0";
+	struct con_fb* fbs = 0;
 	
+	fd = open(drm_card_str, O_RDWR | O_CLOEXEC);
+	fprintf(stderr, "Trying to open Framebuffer with DRM and Double Buffering Enabled on %s ... \n", drm_card_str);
+	fbs = try_drm_fb(fd, 1);
+	if (fbs != 0) {
+		goto successful_fbs_setup;
+	}
+	fprintf(stderr, " ... Failure\n");
+	close(fd);
+	fd = open(fb_str, O_RDWR | O_CLOEXEC);
+	fprintf(stderr, "Trying to open Framebuffer with Legacy Framebuffer and Double Buffering Workaround on %s ... \n", fb_str);
+	fbs = try_legacy_fb(fd, 1);
+	if (fbs != 0) {
+		goto successful_fbs_setup;
+	}
+	fprintf(stderr, " ... Failure\n");
+	close(fd);
+	fd = open(drm_card_str, O_RDWR | O_CLOEXEC);
+	fprintf(stderr, "Trying to open Framebuffer with DRM and Double Buffering Disabled on %s ... \n", drm_card_str);
+	fbs = try_drm_fb(fd, 0);
+	if (fbs != 0) {
+		goto successful_fbs_setup;
+	}
+	fprintf(stderr, " ... Failure\n");
+	close(fd);
+	fd = open(fb_str, O_RDWR | O_CLOEXEC);
+	fprintf(stderr, "Trying to open Framebuffer with Legacy Framebuffer without Double Buffering Workaround on %s ... \n", fb_str);
+	fbs = try_legacy_fb(fd, 0);
+	if (fbs != 0) {
+		goto successful_fbs_setup;
+	}
+	fprintf(stderr, " ... Failure\n");
+	fprintf(stderr, "Could not open Framebuffer!  Exiting.\n");
+	close(fd);
+	return 1;
 	
-	fd = open("/dev/fb0", O_RDWR);
-	if (fd < 0) {
-		printf("Error: Invaild fd.  Possible open() failure!  Stage-3\n");
-		return 4;
-	}
-	
-	if (ioctl(fd, FBIOGET_FSCREENINFO, &finfo) != 0) {
-		printf("Error: Error reading fixed information.\n");
-		return 5;
-	}
-	if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) != 0) {
-		printf("Error: Error reading variable information.  Stage-1\n");
-		return 5;
-	}
-	if (vinfo.grayscale != 0 || vinfo.bits_per_pixel != 32 || vinfo.xoffset != 0 || vinfo.yoffset != 0) {
-		vinfo.grayscale = 0;
-		vinfo.bits_per_pixel = 32;
-		vinfo.xoffset = 0;
-		vinfo.yoffset = 0;
-		if (ioctl(fd, FBIOPUT_VSCREENINFO, &vinfo) != 0) {
-			printf("Error: Error setting variable information.  Stage-1\n");
-			return 13;
-		}
-		if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) != 0) {
-			printf("Error: Error reading variable information.  Stage-2\n");
-			return 5;
-		}
-		if (vinfo.grayscale != 0 || vinfo.bits_per_pixel != 32 || vinfo.xoffset != 0 || vinfo.yoffset != 0) {
-			printf("Error: Could not set modes.  Upon rechecking we found: \n");
-			printf("\tvinfo.grayscale != 0\n");
-			printf("\tvinfo.bits_per_pixel != 32\n");
-			printf("\tvinfo.xoffset != 0\n");
-			printf("\tvinfo.yoffset != 0\n");
-			return 14;
-		}
-	}
-	if (vinfo.yres * 2 > vinfo.yres_virtual) {
-		vinfo.yres_virtual = vinfo.yres * 2;
-		if (ioctl(fd, FBIOPUT_VSCREENINFO, &vinfo) != 0) {
-			printf("Error: Error setting variable information.  Stage-2\n");
-			return 13;
-		}
-		if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) != 0) {
-			printf("Error: Error reading variable information.  Stage-3\n");
-			return 5;
-		}
-		if (vinfo.yres * 2 > vinfo.yres_virtual) {
-			printf("Error: Could not set modes.  Upon rechecking we found: \n");
-			printf("\tvinfo.yres_virtual < vinfo.yres * 2\n");
-			return 16;
-		}
-	}
-	
-	if (vinfo.bits_per_pixel != 32) {
-		printf("Error: Wrong bits per pixel!\n");
-		return 6;
-	}
-	
-	printf("Vinfo: Res - %dx%d, BPP - %d\n", vinfo.xres, vinfo.yres, vinfo.bits_per_pixel);
-	printf("finfo.line_length: %d\n", finfo.line_length);
-	printf("vinfo.xres: %d\n", vinfo.xres);
-	printf("vinfo.yres: %d\n", vinfo.yres);
-	printf("vinfo.xres_virtual: %d\n", vinfo.xres_virtual);
-	printf("vinfo.yres_virtual: %d\n", vinfo.yres_virtual);
-	printf("finfo.xpanstep: %d\n", finfo.xpanstep);
-	printf("finfo.ypanstep: %d\n", finfo.ypanstep);
-	printf("vinfo.vmode: %d\n", vinfo.vmode);
-	
-	void* ptr = 0;
-	void* ptr2;
-	
-	errno = 0;
-	//exit(50);
-	unsigned int screensize = vinfo.yres * finfo.line_length;
-	ptr = mmap(ptr, screensize * 2, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if (ptr == MAP_FAILED || ptr == 0 || errno != 0) {
-		printf("Error: mmap() Failed!  Could not create virtual address space mapping!\n");
-		printf("errno: %s\n", strerror(errno));
-		return 7;
-	}
-	ptr2 = ptr + screensize;
+	successful_fbs_setup:
+	fprintf(stderr, " ... Success\n");
+	fprintf(stdout, "\nDrawing\n");
 	
 	struct cube box;
 	struct camera cam;
@@ -399,12 +378,12 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	
 	float max_fov_degrees = 90.0;
 	
-	if (vinfo.xres > vinfo.yres) {
+	if (fbs[0].width > fbs[0].height) {
 		cam.h_fov = max_fov_degrees;
-		cam.v_fov = (max_fov_degrees * vinfo.yres) / vinfo.xres;
+		cam.v_fov = (max_fov_degrees * fbs[0].height) / fbs[0].width;
 	} else {
 		cam.v_fov = max_fov_degrees;
-		cam.h_fov = (max_fov_degrees * vinfo.xres) / vinfo.yres;
+		cam.h_fov = (max_fov_degrees * fbs[0].width) / fbs[0].height;
 	}
 	
 	// Create New Thread
@@ -428,14 +407,14 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 		return 10;
 	}
 	
-	uint32_t* fptr = 0;
-	uint32_t* fbuffer = 0;
-	fptr = malloc(vinfo.xres * vinfo.yres * sizeof(uint32_t) * 2);
-	if (fptr == 0) {
-		printf("Error: malloc() of fptr failed\n");
-		exit(12);
-	}
-	fbuffer = fptr + vinfo.xres * vinfo.yres;
+	//uint32_t* fptr = 0;
+	//uint32_t* fbuffer = 0;
+	//fptr = malloc(fbs[0].width * fbs[0].height * sizeof(uint32_t) * 2);
+	//if (fptr == 0) {
+	//	printf("Error: malloc() of fptr failed\n");
+	//	exit(12);
+	//}
+	//fbuffer = fptr + fbs[0].width * fbs[0].height;
 	
 	struct matrix buffer_p0;
 	struct matrix buffer_p1;
@@ -447,25 +426,31 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	unsigned int y_i;
 	unsigned int in_fov_p0;
 	unsigned int in_fov_p1;
+	volatile uint32_t* bfb_ptr;
+	/*
 	y_i = 0;
-	while (y_i < vinfo.yres) {
+	while (y_i < fbs[0].height) {
 		x_i = 0;
-		while (x_i < vinfo.xres) {
-			fptr[y_i * vinfo.xres + x_i] = 0xFF000000;
+		while (x_i < fbs[0].width) {
+			fptr[y_i * fbs[0].width + x_i + fbs[0].width * fbs[0].height] = 0xFF000000;
 			x_i++;
 		}
 		y_i++;
 	}
-	y_i = 0;
-	while (y_i < vinfo.yres) {
-		x_i = 0;
-		while (x_i < vinfo.xres) {
-			fptr[y_i * vinfo.xres + x_i + vinfo.xres * vinfo.yres] = 0xFF000000;
-			x_i++;
-		}
-		y_i++;
-	}
+	*/
 	while (running) {
+		y_i = 0;
+		while (y_i < fbs[0].height) {
+			x_i = 0;
+			while (x_i < fbs[0].width) {
+				bfb_ptr = fbs[0].fb_bfb + y_i * fbs[0].line_length + x_i * 4;
+				*bfb_ptr = 0x00000000;
+				//fptr[y_i * fbs[0].width + x_i] = 0xFF000000;
+				x_i++;
+			}
+			y_i++;
+		}
+		
 		x_i = 0;
 		while (x_i < 12) {
 			pthread_mutex_lock(&mutex);
@@ -473,102 +458,48 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 			in_fov_p1 = is_in_fov(&cam, &(box.lines[x_i].p1), &buffer_p1);
 			pthread_mutex_unlock(&mutex);
 			if (in_fov_p0) {
-				x_p0 = buffer_p0.x / cam.h_fov * vinfo.xres;
-				y_p0 = (cam.v_fov - buffer_p0.y) / cam.v_fov * vinfo.yres;
-				fbuffer[y_p0 * vinfo.xres + x_p0] = box.lines[x_i].p0_color;
+				x_p0 = buffer_p0.x / cam.h_fov * fbs[0].width;
+				y_p0 = (cam.v_fov - buffer_p0.y) / cam.v_fov * fbs[0].height;
+				bfb_ptr = fbs[0].fb_bfb + y_p0 * fbs[0].line_length + x_p0 * 4;
+				*bfb_ptr = box.lines[x_i].p0_color;
+				//fbuffer[y_p0 * fbs[0].width + x_p0] = box.lines[x_i].p0_color;
 			}
 			if (in_fov_p1) {
-				x_p1 = buffer_p1.x / cam.h_fov * vinfo.xres;
-				y_p1 = (cam.v_fov - buffer_p1.y) / cam.v_fov * vinfo.yres;
-				fbuffer[y_p1 * vinfo.xres + x_p1] = box.lines[x_i].p1_color;
+				x_p1 = buffer_p1.x / cam.h_fov * fbs[0].width;
+				y_p1 = (cam.v_fov - buffer_p1.y) / cam.v_fov * fbs[0].height;
+				bfb_ptr = fbs[0].fb_bfb + y_p1 * fbs[0].line_length + x_p1 * 4;
+				*bfb_ptr = box.lines[x_i].p1_color;
+				//fbuffer[y_p1 * fbs[0].width + x_p1] = box.lines[x_i].p1_color;
 			}
 			if (in_fov_p0 && in_fov_p1) {
-				draw_grad_line(x_p0, y_p0, x_p1, y_p1, box.lines[x_i].p0_color, box.lines[x_i].p1_color, fbuffer, vinfo.xres, vinfo.yres);
+				draw_grad_line(x_p0, y_p0, x_p1, y_p1, box.lines[x_i].p0_color, box.lines[x_i].p1_color, fbs[0].fb_bfb, fbs[0].line_length / 4);
 			}
 			x_i++;
 		}
+		/*
 		y_i = 0;
-		while (y_i < vinfo.yres) {
+		while (y_i < fbs[0].height) {
 			x_i = 0;
-			while (x_i < vinfo.xres) {
-				if (fbuffer[y_i * vinfo.xres + x_i] == 0x00000000) {
-					*((uint32_t*)(ptr2 + x_i * (vinfo.bits_per_pixel / 8) + y_i * finfo.line_length)) = 0x00000000;
-					fbuffer[y_i * vinfo.xres + x_i] = 0x7F000000;
+			while (x_i < fbs[0].width) {
+				if (fbuffer[y_i * fbs[0].width + x_i] == 0x00000000) {
+					*((uint32_t*)(fbs[0].fb_bfb + x_i * 4 + y_i * fbs[0].line_length)) = 0x00000000;
+					fbuffer[y_i * fbs[0].width + x_i] = 0x7F000000;
 				} else {
-					if (fbuffer[y_i * vinfo.xres + x_i] != 0xFF000000) {
-						*((uint32_t*)(ptr2 + x_i * (vinfo.bits_per_pixel / 8) + y_i * finfo.line_length)) = fbuffer[y_i * vinfo.xres + x_i];
-						fbuffer[y_i * vinfo.xres + x_i] = 0x00000000;
+					if (fbuffer[y_i * fbs[0].width + x_i] != 0xFF000000) {
+						*((uint32_t*)(fbs[0].fb_bfb + x_i * 4 + y_i * fbs[0].line_length)) = fbuffer[y_i * fbs[0].width + x_i];
+						fbuffer[y_i * fbs[0].width + x_i] = 0x00000000;
 					}
 				}
 				x_i++;
 			}
 			y_i++;
 		}
-		if (ptr2 == ptr) {
-			vinfo.yoffset = 0;
-			ptr2 = ptr + screensize;
-			fbuffer = fptr + vinfo.xres * vinfo.yres;
-		} else {
-			vinfo.yoffset = vinfo.yres + vinfo.yoffset;
-			ptr2 = ptr;
-			fbuffer = fptr;
-		}
-		if (ioctl(fd, FBIOPAN_DISPLAY, &vinfo) == -1) {
-			printf("Error: Display Pan Failed.\n");
-			printf("errno: %s\n", strerror(errno));
-			exit(15);
-		}
+		*/
+		swap_buffers(fd, fbs, 0);
+		vsync_wait(fd, fbs, 0);
 		cam.frame_counter++;
 	}
 	printf("Exiting\n");
-	y_i = 0;
-	while (y_i < vinfo.yres) {
-		x_i = 0;
-		while (x_i < vinfo.xres) {
-			if (fbuffer[y_i * vinfo.xres + x_i] == 0x00000000) {
-				fbuffer[y_i * vinfo.xres + x_i] = 0xFF000000;
-				*((uint32_t*)(ptr2 + x_i * (vinfo.bits_per_pixel / 8) + y_i * finfo.line_length)) = 0x00000000;
-			}
-			x_i++;
-		}
-		y_i++;
-	}
-	if (ptr2 == ptr) {
-		vinfo.yoffset = 0;
-		ptr2 = ptr + screensize;
-		fbuffer = fptr + vinfo.xres * vinfo.yres;
-	} else {
-		vinfo.yoffset = vinfo.yres + vinfo.yoffset;
-		ptr2 = ptr;
-		fbuffer = fptr;
-	}
-	if (ioctl(fd, FBIOPAN_DISPLAY, &vinfo) == -1) {
-		printf("Error: Display Pan Failed. - At Exit1\n");
-		printf("errno: %s\n", strerror(errno));
-		exit(17);
-	}
-	y_i = 0;
-	while (y_i < vinfo.yres) {
-		x_i = 0;
-		while (x_i < vinfo.xres) {
-			if (fbuffer[y_i * vinfo.xres + x_i] == 0x00000000) {
-				fbuffer[y_i * vinfo.xres + x_i] = 0xFF000000;
-				*((uint32_t*)(ptr2 + x_i * (vinfo.bits_per_pixel / 8) + y_i * finfo.line_length)) = 0x00000000;
-			}
-			x_i++;
-		}
-		y_i++;
-	}
-	if (ptr2 == ptr) {
-		vinfo.yoffset = 0;
-		ptr2 = ptr + screensize;
-		fbuffer = fptr + vinfo.xres * vinfo.yres;
-		if (ioctl(fd, FBIOPAN_DISPLAY, &vinfo) == -1) {
-			printf("Error: Display Pan Failed. - At Exit2\n");
-			printf("errno: %s\n", strerror(errno));
-			exit(17);
-		}
-	}
 	
 	// Close and destroy threads
 	running = 0;
@@ -576,14 +507,13 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	pthread_mutex_destroy(&mutex);
 	
 	// Free up allocated memory
-	free(fptr);
-	munmap(ptr, screensize * 2);
-	
+	//free(fptr);
+	clean_up(fd, fbs);
 	close(fd);
 	
 	return 0;
 }
-void draw_grad_line(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, uint32_t color1, uint32_t color2, uint32_t* framebuffer, unsigned int fb_width, unsigned int fb_height) {
+void draw_grad_line(unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, uint32_t color1, uint32_t color2, uint32_t* framebuffer, unsigned int fb_width) {
 	signed int xd;
 	signed int yd;
 	signed int xs;
