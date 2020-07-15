@@ -3,8 +3,10 @@
 #include <stdint.h>
 #include <string.h>
 #include <linux/fb.h>
-#include <drm/drm.h>
-#include <drm/drm_mode.h>
+//#include <drm/drm.h>
+//#include <drm/drm_mode.h>
+#include <libdrm/drm.h>
+#include <libdrm/drm_mode.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -609,7 +611,7 @@ struct con_fb* try_drm_fb(signed int fd, unsigned int setup_doublebuffering) {
 		if (fbs[l].fb_ffb != 0) {
 			fbs2[n] = fbs[l];
 			fbs2[n].a_length = m;
-			fbs2[n].line_length = fbs2[n].width * 4;
+			fbs2[n].line_length = fbs2[n].size / fbs2[n].height;
 			fbs2[n].type = 1;
 			n++;
 		}

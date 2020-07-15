@@ -215,43 +215,51 @@ signed int main(signed int argc, char* argv[], char* envp[]) {
 	}
 	
 	// Child Begin:
-	char* drm_card_str = "/dev/dri/card1";
+	char* drm_card_str = "/dev/dri/card0";
 	char* fb_str = "/dev/fb0";
 	struct con_fb* fbs = 0;
 	
 	fd = open(drm_card_str, O_RDWR | O_CLOEXEC);
 	fprintf(stderr, "Trying to open Framebuffer with DRM and Double Buffering Enabled on %s ... \n", drm_card_str);
-	fbs = try_drm_fb(fd, 1);
-	if (fbs != 0) {
-		goto successful_fbs_setup;
+	if (fd >= 0) {
+		fbs = try_drm_fb(fd, 1);
+		if (fbs != 0) {
+			goto successful_fbs_setup;
+		}
+		close(fd);
 	}
 	fprintf(stderr, " ... Failure\n");
-	close(fd);
 	fd = open(fb_str, O_RDWR | O_CLOEXEC);
 	fprintf(stderr, "Trying to open Framebuffer with Legacy Framebuffer and Double Buffering Workaround on %s ... \n", fb_str);
-	fbs = try_legacy_fb(fd, 1);
-	if (fbs != 0) {
-		goto successful_fbs_setup;
+	if (fd >= 0) {
+		fbs = try_legacy_fb(fd, 1);
+		if (fbs != 0) {
+			goto successful_fbs_setup;
+		}
+		close(fd);
 	}
 	fprintf(stderr, " ... Failure\n");
-	close(fd);
 	fd = open(drm_card_str, O_RDWR | O_CLOEXEC);
 	fprintf(stderr, "Trying to open Framebuffer with DRM and Double Buffering Disabled on %s ... \n", drm_card_str);
-	fbs = try_drm_fb(fd, 0);
-	if (fbs != 0) {
-		goto successful_fbs_setup;
+	if (fd >= 0) {
+		fbs = try_drm_fb(fd, 0);
+		if (fbs != 0) {
+			goto successful_fbs_setup;
+		}
+		close(fd);
 	}
 	fprintf(stderr, " ... Failure\n");
-	close(fd);
 	fd = open(fb_str, O_RDWR | O_CLOEXEC);
 	fprintf(stderr, "Trying to open Framebuffer with Legacy Framebuffer without Double Buffering Workaround on %s ... \n", fb_str);
-	fbs = try_legacy_fb(fd, 0);
-	if (fbs != 0) {
-		goto successful_fbs_setup;
+	if (fd >= 0) {
+		fbs = try_legacy_fb(fd, 0);
+		if (fbs != 0) {
+			goto successful_fbs_setup;
+		}
+		close(fd);
 	}
 	fprintf(stderr, " ... Failure\n");
 	fprintf(stderr, "Could not open Framebuffer!  Exiting.\n");
-	close(fd);
 	return 1;
 	
 	successful_fbs_setup:
